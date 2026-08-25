@@ -179,7 +179,7 @@ function render() {
         h('span', { html: `<b>${esc(t.product) || '—'}</b> product` }),
         h('span', { html: `<b>${esc(t.tank_volume ?? '—')}</b> gal` }),
         h('span', { html: `<b>${count}</b> well${count === 1 ? '' : 's'}` }),
-        h('span', { html: `${esc(t.program) || '—'} · ${esc(t.target_ppm ?? '—')} ppm` }),
+        (t.current_inventory != null && t.current_inventory !== '') ? h('span', { html: `inv <b>${esc(t.current_inventory)}</b> gal` }) : null,
         t.source === 'field' ? h('span', { class: 'badge-field', text: 'field-added' }) : null,
         !t.reviewed_at ? h('span', { class: 'badge-review', text: 'NEEDS REVIEW' }) : null,
         t.needs_order ? h('span', { class: 'badge-order', text: 'NEEDS ORDER' }) : null,
@@ -225,6 +225,7 @@ function editField(labelText, value, save, opts = {}) {
     flag.className = 'saved-flag ' + (navigator.onLine ? '' : 'queued');
     flag.textContent = navigator.onLine ? 'saved ✓' : 'queued ✓';
     flash(flag);
+    if (opts.refresh) await refreshDetail(); // recompute top metric
   });
   const lbl = h('label', {}, [labelText, flag]);
   return { wrap: h('div', { class: 'field' }, [lbl, input]), input };
@@ -291,6 +292,7 @@ function numberFieldInline(labelText, value, saveVal, confirm) {
   inp.addEventListener('change', async () => {
     await saveVal(inp.value === '' ? null : Number(inp.value));
     flag.className = 'saved-flag ' + (navigator.onLine ? '' : 'queued'); flag.textContent = navigator.onLine ? 'saved ✓' : 'queued ✓'; flash(flag);
+    await refreshDetail(); // tank size feeds the days-to-empty metric
   });
   const row = h('div', { class: 'inline-confirm' }, [inp]);
   if (confirm && confirm.show) row.append(...smallYesNo(confirm.value, confirm.onSave));
@@ -343,7 +345,7 @@ function wellCard(w, tank, pumpMakes) {
   const makeF = selectWithOther('Pump make', w.pump_make, pumpMakes, async (v) => { await Sync.editWell(w.id, { pump_make: v, pump_sn: null }); }, { rerender: true });
   const snF = editField('Pump S/N', w.pump_sn, (v) => Sync.editWell(w.id, { pump_sn: v }), { raw: true });
   const foundF = editField('Rate as found', w.rate_as_found, (v) => Sync.editWell(w.id, { rate_as_found: v }), { type: 'number', number: true, inputmode: 'decimal' });
-  const leftF = editField('Rate as left', w.rate_as_left, (v) => Sync.editWell(w.id, { rate_as_left: v }), { type: 'number', number: true, inputmode: 'decimal' });
+  const leftF = editField('Rate as left', w.rate_as_left, (v) => Sync.editWell(w.id, { rate_as_left: v }), { type: 'number', number: true, inputmode: 'decimal', refresh: true });
   const detach = h('button', { class: 'linkbtn', style: 'color:var(--danger)', onclick: async () => {
     await Sync.detachWell(w.id); await loadLocal(); openDetail(tank.id); toast('Well detached');
   } }, 'Detach from tank');
@@ -390,9 +392,23 @@ function openDetail(tankId) {
   APP.currentTankId = tankId;
   const wells = (APP.wellsByTank.get(tankId) || []).slice().sort((a, b) => (a.asset_name || '').localeCompare(b.asset_name || ''));
 
-  const programs = distinct(APP.tanks, 'program');
   const applications = distinct(APP.tanks, 'application_id');
   const pumpMakes = distinct(APP.wells, 'pump_make');
+
+  // Days-to-empty: (current inventory − 5% heel of tank size) ÷ total as-left rate
+  const totalRate = attachedWells(tank).reduce((s, w) => s + (Number(w.rate_as_left) || 0), 0);
+  const invVal = (tank.current_inventory == null || tank.current_inventory === '') ? NaN : Number(tank.current_inventory);
+  const capVal = (tank.tank_volume == null || tank.tank_volume === '') ? 0 : Number(tank.tank_volume);
+  let metricTile = null;
+  if (totalRate > 0 && isFinite(invVal)) {
+    const usable = invVal - 0.05 * capVal;
+    const days = usable / totalRate;
+    const cls = days <= 3 ? ' danger' : (days <= 10 ? ' warn' : '');
+    metricTile = h('div', { class: 'metric' + cls }, [
+      h('div', { class: 'metric-big', text: (days <= 0 ? '0' : days.toFixed(1)) + ' days to empty' }),
+      h('div', { class: 'metric-sub', text: `usable ${Math.max(0, usable).toFixed(0)} gal ÷ ${totalRate}/day (5% heel)` }),
+    ]);
+  }
 
   const ptypeRO = h('input', { type: 'text', disabled: '' }); ptypeRO.value = tank.product_type || '';
   // confirmations are only required for fields that have a pre-populated value to check
@@ -412,22 +428,19 @@ function openDetail(tankId) {
     h('div', { class: 'tank-name-lg', text: combinedName(tank) }),
     h('div', { class: 'mono muted', style: 'word-break:break-all;font-size:.72rem;margin:.15rem 0 .2rem', text: 'ID: ' + tank.tgl_slot }),
     revChip,
+    metricTile,
 
     h('div', { class: 'section-title', text: 'Configuration' }),
     productField(tank),
-    h('div', { class: 'grid2' }, [
-      h('div', { class: 'field' }, [h('label', {}, 'Product type (auto)'), ptypeRO]),
-      selectWithOther('Program', tank.program, programs, (v) => Sync.editTank(tank.id, { program: v })),
-    ]),
     numberFieldInline('Tank size (gal)', tank.tank_volume, (v) => Sync.editTank(tank.id, { tank_volume: v }),
       { show: needSize, value: tank.size_confirmed, onSave: (v) => Sync.editTank(tank.id, { size_confirmed: v }) }),
     h('div', { class: 'grid2' }, [
-      editField('Target PPM', tank.target_ppm, (v) => Sync.editTank(tank.id, { target_ppm: v }), { type: 'number', number: true, inputmode: 'decimal' }).wrap,
-      editField('Asset tag', tank.asset_tag, (v) => Sync.editTank(tank.id, { asset_tag: v }), { raw: true }).wrap,
+      h('div', { class: 'field' }, [h('label', {}, 'Product type (auto)'), ptypeRO]),
+      selectWithOther('Application', tank.application_id, applications, (v) => Sync.editTank(tank.id, { application_id: v })),
     ]),
     h('div', { class: 'grid2' }, [
-      selectWithOther('Application', tank.application_id, applications, (v) => Sync.editTank(tank.id, { application_id: v })),
-      editField('Current inventory (gal)', tank.current_inventory, (v) => Sync.editTank(tank.id, { current_inventory: v }), { type: 'number', number: true, inputmode: 'decimal' }).wrap,
+      editField('Current inventory (gal)', tank.current_inventory, (v) => Sync.editTank(tank.id, { current_inventory: v }), { type: 'number', number: true, inputmode: 'decimal', refresh: true }).wrap,
+      editField('Asset tag', tank.asset_tag, (v) => Sync.editTank(tank.id, { asset_tag: v }), { raw: true }).wrap,
     ]),
     checkboxField('Needs order', tank.needs_order, (v) => Sync.editTank(tank.id, { needs_order: v })),
     editField('Notes', tank.notes, (v) => Sync.editTank(tank.id, { notes: v }), { type: 'textarea', rows: 2 }).wrap,

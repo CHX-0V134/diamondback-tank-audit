@@ -152,6 +152,17 @@ input:focus, select:focus, textarea:focus { border-color: var(--primary); box-sh
 .rev-chip { display: inline-block; font-size: .8rem; font-weight: 700; padding: .3rem .6rem; border-radius: 999px; margin: .1rem 0 .2rem; }
 .rev-chip.warn { background: color-mix(in srgb, var(--warn) 20%, transparent); color: color-mix(in srgb, var(--warn) 70%, var(--text)); }
 .rev-chip.ok { background: color-mix(in srgb, var(--ok) 20%, transparent); color: color-mix(in srgb, var(--ok) 70%, var(--text)); }
+
+/* days-to-empty metric tile */
+.metric { margin: .5rem 0 .2rem; padding: .75rem .95rem; border-radius: 12px;
+  background: color-mix(in srgb, var(--slb-blue) 12%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--slb-blue) 30%, var(--border)); }
+.metric-big { font-size: 1.35rem; font-weight: 800; color: var(--slb-blue); line-height: 1.1; }
+.metric-sub { font-size: .78rem; color: var(--text-muted); margin-top: .15rem; }
+.metric.warn { background: color-mix(in srgb, var(--warn) 14%, var(--surface)); border-color: color-mix(in srgb, var(--warn) 40%, var(--border)); }
+.metric.warn .metric-big { color: var(--warn); }
+.metric.danger { background: color-mix(in srgb, var(--danger) 14%, var(--surface)); border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); }
+.metric.danger .metric-big { color: var(--danger); }
 .yn-row { display: flex; gap: .5rem; }
 .inline-confirm { display: flex; gap: .4rem; align-items: stretch; }
 .inline-confirm > input, .inline-confirm > select { flex: 1 1 auto; min-width: 0; }
