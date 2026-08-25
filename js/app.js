@@ -515,8 +515,13 @@ function renderMarkers() {
     const reviewed = !!t.reviewed_at;
     reviewed ? okN++ : needN++;
     const m = L.circleMarker(ll, { radius: 8, color: '#fff', weight: 2, fillColor: reviewed ? '#1a8f4c' : '#e0a100', fillOpacity: 1 });
-    m.on('click', () => openDetail(t.id));
-    m.bindTooltip(combinedName(t), { direction: 'top' });
+    const popup = h('div', { class: 'map-popup' }, [
+      h('div', { class: 'map-popup-name', text: combinedName(t) }),
+      h('div', { class: 'map-popup-sub' + (reviewed ? ' ok' : ' warn'), text: reviewed ? '✓ Reviewed' : '● Needs review' }),
+      h('button', { class: 'btn primary', onclick: () => { _map.closePopup(); openDetail(t.id); } }, 'View tank'),
+      h('a', { class: 'btn ghost', href: `https://maps.apple.com/?daddr=${ll[0]},${ll[1]}`, target: '_blank', rel: 'noopener' }, 'Directions'),
+    ]);
+    m.bindPopup(popup, { closeButton: true, minWidth: 170 });
     _markerLayer.addLayer(m);
     pts.push(ll);
   }

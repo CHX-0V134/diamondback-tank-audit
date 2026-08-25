@@ -218,8 +218,17 @@ input:focus, select:focus, textarea:focus { border-color: var(--primary); box-sh
 .tankmap-body { height: 100%; overflow-y: auto; padding-bottom: env(safe-area-inset-bottom); }
 #tmap { height: 52vh; width: 100%; margin-top: .5rem; }
 .tankmap-info { padding: .7rem 1rem; font-weight: 600; }
-.leaflet-container { background: var(--surface-2); font: inherit; }
+/* z-index:1 gives the map its own stacking context so Leaflet's internal panes
+   (z up to ~700) stay INSIDE the map and don't paint over the detail panel */
+.leaflet-container { background: var(--surface-2); font: inherit; z-index: 1; }
 .leaflet-control-attribution { font-size: .6rem; }
+.map-popup { min-width: 160px; }
+.map-popup-name { font-weight: 700; font-size: .95rem; margin-bottom: .1rem; }
+.map-popup-sub { font-size: .78rem; font-weight: 700; margin-bottom: .5rem; }
+.map-popup-sub.ok { color: var(--ok); }
+.map-popup-sub.warn { color: var(--warn); }
+.map-popup .btn { width: 100%; min-height: 40px; padding: .45rem; margin-top: .35rem; }
+.leaflet-popup-content { margin: .7rem .8rem; }
 
 .linkbtn { background: none; border: none; color: var(--primary); font-weight: 600; cursor: pointer; padding: .55rem 0; font-size: .95rem; min-height: 40px; touch-action: manipulation; }
 .row-actions { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .2rem; }
