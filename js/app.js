@@ -149,9 +149,11 @@ function combinedName(t) {
 
 function matchesFilter(t) {
   const q = $('#search').value.trim().toLowerCase();
-  const ff = $('#filter-foreman').value, ft = $('#filter-type').value;
+  const ff = $('#filter-foreman').value, ft = $('#filter-type').value, fs = $('#filter-status').value;
   if (ff && t.foreman !== ff) return false;
   if (ft && t.product_type !== ft) return false;
+  if (fs === 'unreviewed' && t.reviewed_at) return false;
+  if (fs === 'reviewed' && !t.reviewed_at) return false;
   if (!q) return true;
   if ((t.tgl_slot || '').toLowerCase().includes(q)) return true;
   if ((t.product || '').toLowerCase().includes(q)) return true;
@@ -179,6 +181,7 @@ function render() {
         h('span', { html: `<b>${count}</b> well${count === 1 ? '' : 's'}` }),
         h('span', { html: `${esc(t.program) || '—'} · ${esc(t.target_ppm ?? '—')} ppm` }),
         t.source === 'field' ? h('span', { class: 'badge-field', text: 'field-added' }) : null,
+        !t.reviewed_at ? h('span', { class: 'badge-review', text: 'NEEDS REVIEW' }) : null,
         t.needs_order ? h('span', { class: 'badge-order', text: 'NEEDS ORDER' }) : null,
       ]),
       h('div', { class: 'tank-slot mono', text: t.tgl_slot }),
@@ -269,6 +272,18 @@ function checkboxField(labelText, checked, onSave) {
     flag.className = 'saved-flag ' + (navigator.onLine ? '' : 'queued'); flag.textContent = navigator.onLine ? 'saved ✓' : 'queued ✓'; flash(flag);
   });
   return h('div', { class: 'field' }, [h('label', { class: 'checkrow' }, [cb, h('span', { text: labelText }), flag])]);
+}
+
+// Required Yes/No confirmation. value: true | false | null (unanswered).
+function yesNoField(labelText, value, onSave) {
+  const flag = savedFlag(navigator.onLine ? '' : 'queued');
+  const yes = h('button', { type: 'button', class: 'yn' + (value === true ? ' on-yes' : '') }, 'Yes');
+  const no = h('button', { type: 'button', class: 'yn' + (value === false ? ' on-no' : '') }, 'No');
+  const set = async (val) => { await onSave(val); await refreshDetail(); };
+  yes.addEventListener('click', () => set(true));
+  no.addEventListener('click', () => set(false));
+  const need = value == null ? h('span', { class: 'yn-need', text: 'required' }) : null;
+  return h('div', { class: 'field' }, [h('label', {}, [labelText, need, flag]), h('div', { class: 'yn-row' }, [yes, no])]);
 }
 
 function productField(tank) {
@@ -364,14 +379,24 @@ function openDetail(tankId) {
   const pumpMakes = distinct(APP.wells, 'pump_make');
 
   const ptypeRO = h('input', { type: 'text', disabled: '' }); ptypeRO.value = tank.product_type || '';
+  const bothAnswered = tank.size_confirmed != null && tank.product_confirmed != null;
+  const reviewed = !!tank.reviewed_at;
+  const revChip = reviewed
+    ? h('div', { class: 'rev-chip ok', text: '✓ Reviewed' + (tank.reviewed_by ? ' · ' + tank.reviewed_by : '') })
+    : h('div', { class: 'rev-chip warn', text: '● Needs review' });
+  const reviewBtn = reviewed
+    ? h('button', { class: 'btn ghost block', onclick: async () => { await Sync.editTank(tank.id, { reviewed_at: null, reviewed_by: null }); await refreshDetail(); toast('Reopened for editing'); } }, '✓ Reviewed — tap to reopen')
+    : h('button', { class: 'btn primary block', ...(bothAnswered ? {} : { disabled: '' }), onclick: async () => { await Sync.editTank(tank.id, { reviewed_at: new Date().toISOString(), reviewed_by: Sync.userEmail() }); await refreshDetail(); toast('Marked reviewed', 'ok'); } }, bothAnswered ? 'Mark reviewed' : 'Answer both Yes/No to review');
 
   const body = h('div', { class: 'panel-body' }, [
     h('div', { class: 'section-title', style: 'margin-top:0', text: 'Tank' }),
     h('div', { class: 'tank-name-lg', text: combinedName(tank) }),
     h('div', { class: 'mono muted', style: 'word-break:break-all;font-size:.72rem;margin:.15rem 0 .2rem', text: 'ID: ' + tank.tgl_slot }),
+    revChip,
 
     h('div', { class: 'section-title', text: 'Configuration' }),
     productField(tank),
+    yesNoField('Product correct?', tank.product_confirmed, (v) => Sync.editTank(tank.id, { product_confirmed: v })),
     h('div', { class: 'grid2' }, [
       h('div', { class: 'field' }, [h('label', {}, 'Product type (auto)'), ptypeRO]),
       selectWithOther('Program', tank.program, programs, (v) => Sync.editTank(tank.id, { program: v })),
@@ -380,6 +405,7 @@ function openDetail(tankId) {
       editField('Tank size (gal)', tank.tank_volume, (v) => Sync.editTank(tank.id, { tank_volume: v }), { type: 'number', number: true, inputmode: 'decimal' }).wrap,
       editField('Target PPM', tank.target_ppm, (v) => Sync.editTank(tank.id, { target_ppm: v }), { type: 'number', number: true, inputmode: 'decimal' }).wrap,
     ]),
+    yesNoField('Tank size correct?', tank.size_confirmed, (v) => Sync.editTank(tank.id, { size_confirmed: v })),
     h('div', { class: 'grid2' }, [
       selectWithOther('Application', tank.application_id, applications, (v) => Sync.editTank(tank.id, { application_id: v })),
       editField('Asset tag', tank.asset_tag, (v) => Sync.editTank(tank.id, { asset_tag: v }), { raw: true }).wrap,
@@ -393,6 +419,9 @@ function openDetail(tankId) {
     h('div', { class: 'section-title', text: `Wells served (${wells.filter((w) => w.is_attached && !w.is_deleted).length})` }),
     ...wells.filter((w) => !w.is_deleted).map((w) => wellCard(w, tank, pumpMakes)),
     attachForm(tank),
+
+    h('div', { class: 'section-title', text: 'Review' }),
+    reviewBtn,
   ]);
 
   const panel = $('#detail');
@@ -472,6 +501,7 @@ function wireStaticEvents() {
   });
   $('#filter-foreman').addEventListener('change', render);
   $('#filter-type').addEventListener('change', render);
+  $('#filter-status').addEventListener('change', render);
   window.addEventListener('online', updateSyncUI);
   window.addEventListener('offline', updateSyncUI);
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && APP.currentTankId) closeDetail(); });

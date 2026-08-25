@@ -127,9 +127,9 @@ input:focus, select:focus, textarea:focus { border-color: var(--primary); box-sh
 .menu-row { font-size: .85rem; color: var(--text-muted); margin-bottom: .7rem; }
 
 /* ---- toolbar ---- */
-.toolbar { display: grid; grid-template-columns: 1fr auto auto; gap: .5rem; padding: .5rem .7rem .6rem; background: var(--surface); }
-.toolbar select { width: auto; min-width: 0; }
-@media (max-width: 560px) { .toolbar { grid-template-columns: 1fr 1fr; } .toolbar input { grid-column: 1 / -1; } }
+.toolbar { display: flex; flex-wrap: wrap; gap: .5rem; padding: .5rem .7rem .6rem; background: var(--surface); }
+.toolbar input { flex: 1 1 100%; }
+.toolbar select { flex: 1 1 30%; min-width: 0; width: auto; }
 
 /* ---- list ---- */
 .list { padding: .8rem; display: grid; gap: .6rem; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); max-width: 1200px; margin: 0 auto; }
@@ -146,6 +146,17 @@ input:focus, select:focus, textarea:focus { border-color: var(--primary); box-sh
 .tank-slot { margin-top: .5rem; font-size: .72rem; color: var(--text-muted); word-break: break-all; }
 .badge-field { color: var(--slb-cyan); font-weight: 700; }
 .badge-order { color: #fff; background: var(--danger); font-weight: 700; font-size: .68rem; padding: .15rem .45rem; border-radius: 999px; }
+.badge-review { color: #fff; background: var(--warn); font-weight: 700; font-size: .68rem; padding: .15rem .45rem; border-radius: 999px; }
+
+/* review status chip + Yes/No confirmations */
+.rev-chip { display: inline-block; font-size: .8rem; font-weight: 700; padding: .3rem .6rem; border-radius: 999px; margin: .1rem 0 .2rem; }
+.rev-chip.warn { background: color-mix(in srgb, var(--warn) 20%, transparent); color: color-mix(in srgb, var(--warn) 70%, var(--text)); }
+.rev-chip.ok { background: color-mix(in srgb, var(--ok) 20%, transparent); color: color-mix(in srgb, var(--ok) 70%, var(--text)); }
+.yn-row { display: flex; gap: .5rem; }
+.yn { flex: 1; min-height: 46px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); font-weight: 700; font-size: 1rem; cursor: pointer; touch-action: manipulation; }
+.yn.on-yes { background: var(--ok); color: #fff; border-color: transparent; }
+.yn.on-no { background: var(--danger); color: #fff; border-color: transparent; }
+.yn-need { font-size: .68rem; font-weight: 700; color: var(--warn); background: color-mix(in srgb, var(--warn) 18%, transparent); padding: .05rem .35rem; border-radius: 999px; margin-left: .4rem; }
 .empty { text-align: center; color: var(--text-muted); padding: 3rem 1rem; }
 
 /* ---- detail panel ---- */
