@@ -15,23 +15,14 @@
   <section id="login" class="screen center hidden">
     <div class="card auth-card">
       <div class="brand"><span class="brand-mark">SLB</span><span class="brand-name">Tank Config Audit</span></div>
-      <p class="muted">Sign in with your work email. Access is limited to approved accounts.</p>
+      <p class="muted">Enter your approved work email to continue. No password or code needed.</p>
       <form id="login-form">
         <label for="email">Email</label>
-        <input id="email" type="email" inputmode="email" autocomplete="email" placeholder="you@slb.com" required />
-        <button class="btn primary" type="submit" id="login-btn">Email me a sign-in link</button>
+        <input id="email" type="email" inputmode="email" autocomplete="email" autocapitalize="off" autocorrect="off"
+               spellcheck="false" enterkeyhint="go" placeholder="you@slb.com" required />
+        <button class="btn primary" type="submit" id="login-btn">Continue</button>
       </form>
       <p id="login-msg" class="msg" aria-live="polite"></p>
-    </div>
-  </section>
-
-  <!-- Not authorized -->
-  <section id="denied" class="screen center hidden">
-    <div class="card auth-card">
-      <div class="brand"><span class="brand-mark">SLB</span><span class="brand-name">Tank Config Audit</span></div>
-      <h2>Access pending</h2>
-      <p class="muted">You're signed in as <b id="denied-email"></b>, but this account isn't on the approved list yet. Ask an admin to add your email, then sign in again.</p>
-      <button class="btn ghost" id="denied-signout">Sign out</button>
     </div>
   </section>
 

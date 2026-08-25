@@ -50,7 +50,7 @@ function toast(msg, kind = '') {
 
 // ---- screens ---------------------------------------------------------------
 function show(screen) {
-  ['login', 'denied', 'app'].forEach((id) => $('#' + id).classList.toggle('hidden', id !== screen));
+  ['login', 'app'].forEach((id) => $('#' + id).classList.toggle('hidden', id !== screen));
 }
 
 // ---- boot ------------------------------------------------------------------
@@ -60,31 +60,29 @@ async function boot() {
     navigator.serviceWorker.register('sw.js').catch((e) => console.warn('SW failed', e));
   }
   wireStaticEvents();
-
-  // Auth
-  await Sync.getSession();
-  Sync.onAuthStateChange(async () => { await routeAuth(); });
   Sync.onChange(onSyncEvent);
   await routeAuth();
 }
 
 async function routeAuth() {
-  const session = await Sync.getSession();
-  if (!session) { show('login'); return; }
-  const allowed = await Sync.isAllowed().catch(() => false);
+  const email = Sync.getEmail();
+  if (!email) { show('login'); return; }
+  // If online, confirm the email is still approved; if it was removed, bounce to login.
+  const allowed = await Sync.isAllowed().catch(() => true);
   if (!allowed) {
-    $('#denied-email').textContent = Sync.userEmail() || '';
-    show('denied'); return;
+    Sync.logout(); show('login');
+    const msg = $('#login-msg'); msg.className = 'msg err'; msg.textContent = 'This email is no longer on the approved list.';
+    return;
   }
   show('app');
-  $('#menu-email').textContent = Sync.userEmail() || '';
+  $('#menu-email').textContent = email;
   // Load local snapshot first (instant, offline-safe), then refresh from server.
   await loadLocal();
   render();
   updateSyncUI();
   if (navigator.onLine) {
     const r = await Sync.pull();
-    if (!r.ok && r.reason && r.reason !== 'offline') toast('Sync (pull) issue: ' + r.reason, 'err');
+    if (!r.ok && r.reason && !['offline', 'no-email'].includes(r.reason)) toast('Sync (pull) issue: ' + r.reason, 'err');
   }
 }
 
@@ -370,14 +368,14 @@ function wireStaticEvents() {
     const btn = $('#login-btn'), msg = $('#login-msg');
     const email = $('#email').value.trim();
     if (!email) return;
-    btn.disabled = true; msg.className = 'msg'; msg.textContent = 'Sending…';
-    const { error } = await Sync.sendMagicLink(email);
+    btn.disabled = true; msg.className = 'msg'; msg.textContent = 'Checking…';
+    const r = await Sync.login(email);
     btn.disabled = false;
-    if (error) { msg.className = 'msg err'; msg.textContent = error.message; }
-    else { msg.className = 'msg ok'; msg.textContent = 'Check your email for a sign-in link. Open it on this device.'; }
+    if (r.ok) { msg.className = 'msg'; msg.textContent = ''; await routeAuth(); }
+    else if (r.reason === 'not_allowed') { msg.className = 'msg err'; msg.textContent = "That email isn't on the approved list. Ask an admin to add it."; }
+    else { msg.className = 'msg err'; msg.textContent = r.reason || 'Could not sign in.'; }
   });
-  $('#denied-signout').addEventListener('click', () => Sync.signOut());
-  $('#signout-btn').addEventListener('click', () => Sync.signOut());
+  $('#signout-btn').addEventListener('click', () => { Sync.logout(); $('#account-menu').classList.add('hidden'); show('login'); });
   $('#theme-btn').addEventListener('click', cycleTheme);
   $('#menu-btn').addEventListener('click', () => { $('#account-menu').classList.toggle('hidden'); updateSyncUI(); });
   $('#sync-btn').addEventListener('click', async () => {
