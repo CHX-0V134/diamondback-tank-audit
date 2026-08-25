@@ -8,6 +8,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="stylesheet" href="css/leaflet.css" />
   <link rel="stylesheet" href="css/styles.css" />
 </head>
 <body>
@@ -54,6 +55,12 @@
 
     <div id="offline-banner" class="offline-banner hidden">● Offline — changes are saved on this device and will sync automatically.</div>
 
+    <div class="viewtoggle">
+      <button id="view-list" class="seg on" type="button">List</button>
+      <button id="view-map" class="seg" type="button">Map</button>
+      <span class="map-legend" id="map-legend"></span>
+    </div>
+
     <div id="account-menu" class="menu hidden">
       <div class="menu-email" id="menu-email"></div>
       <div class="menu-row" id="sync-detail"></div>
@@ -62,7 +69,14 @@
 
     <main id="list" class="list"></main>
     <div id="empty" class="empty hidden">No tanks match your filters.</div>
+    <div id="mapview" class="hidden">
+      <div id="map"></div>
+      <div id="map-unmapped" class="map-unmapped"></div>
+    </div>
   </div>
+
+  <!-- Per-tank map overlay -->
+  <div id="tankmap" class="panel hidden" role="dialog" aria-modal="true"></div>
 
   <!-- Tank detail panel -->
   <div id="detail" class="panel hidden" role="dialog" aria-modal="true"></div>
@@ -71,6 +85,7 @@
   <!-- Toast -->
   <div id="toast" class="toast hidden"></div>
 
+  <script src="js/leaflet.js"></script>
   <script src="js/config.js"></script>
   <script src="js/supabase.js"></script>
   <script src="js/db.js"></script>

@@ -428,6 +428,7 @@ function openDetail(tankId) {
     h('div', { class: 'mono muted', style: 'word-break:break-all;font-size:.72rem;margin:.15rem 0 .2rem', text: 'ID: ' + tank.tgl_slot }),
     revChip,
     metricTile,
+    tankLatLng(tank) ? h('button', { class: 'btn ghost block', style: 'margin:.3rem 0 .1rem', onclick: () => openTankMap(tank.id) }, '📍 Map & directions') : null,
 
     h('div', { class: 'section-title', text: 'Configuration' }),
     productField(tank),
@@ -466,6 +467,105 @@ function openDetail(tankId) {
 }
 function closeDetail() { APP.currentTankId = null; $('#detail').classList.add('hidden'); $('#scrim').classList.add('hidden'); }
 
+// ---- map ------------------------------------------------------------------
+let _map = null, _markerLayer = null, _view = 'list', _tmap = null;
+
+// a tank's location = its first attached well (by accounting id) that has coords
+function tankLatLng(t) {
+  const ws = attachedWells(t).slice().sort((a, b) => (a.accounting_id || '').localeCompare(b.accounting_id || ''));
+  for (const w of ws) if (w.latitude != null && w.longitude != null) return [Number(w.latitude), Number(w.longitude)];
+  return null;
+}
+function haversineMi(a, b) {
+  const R = 3958.8, dLat = (b[0] - a[0]) * Math.PI / 180, dLon = (b[1] - a[1]) * Math.PI / 180;
+  const la1 = a[0] * Math.PI / 180, la2 = b[0] * Math.PI / 180;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(la1) * Math.cos(la2) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+function setView(v) {
+  _view = v;
+  $('#view-list').classList.toggle('on', v === 'list');
+  $('#view-map').classList.toggle('on', v === 'map');
+  $('#list').classList.toggle('hidden', v !== 'list');
+  $('#mapview').classList.toggle('hidden', v !== 'map');
+  if (v !== 'list') $('#empty').classList.add('hidden');
+  if (v === 'map') showMapView();
+}
+
+function showMapView() {
+  if (!_map) {
+    _map = L.map('map', { zoomControl: true });
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(_map);
+    _markerLayer = L.layerGroup().addTo(_map);
+  }
+  renderMarkers();
+  setTimeout(() => _map.invalidateSize(), 60); // fix sizing after being unhidden
+}
+
+function renderMarkers() {
+  if (!_map) return;
+  _markerLayer.clearLayers();
+  const tanks = APP.tanks.filter((t) => !t.is_deleted).filter(matchesFilter);
+  const pts = [];
+  let unmapped = 0, needN = 0, okN = 0;
+  for (const t of tanks) {
+    const ll = tankLatLng(t);
+    if (!ll) { unmapped++; continue; }
+    const reviewed = !!t.reviewed_at;
+    reviewed ? okN++ : needN++;
+    const m = L.circleMarker(ll, { radius: 8, color: '#fff', weight: 2, fillColor: reviewed ? '#1a8f4c' : '#e0a100', fillOpacity: 1 });
+    m.on('click', () => openDetail(t.id));
+    m.bindTooltip(combinedName(t), { direction: 'top' });
+    _markerLayer.addLayer(m);
+    pts.push(ll);
+  }
+  if (pts.length) _map.fitBounds(pts, { padding: [30, 30], maxZoom: 15 });
+  else _map.setView([32.1, -102.1], 8);
+  $('#map-unmapped').textContent = unmapped ? `${unmapped} tank${unmapped === 1 ? '' : 's'} without a location (not shown)` : '';
+  $('#map-legend').innerHTML = `<span class="lg needs">●</span> needs review ${needN} &nbsp; <span class="lg ok">●</span> reviewed ${okN}`;
+}
+
+function openTankMap(tankId) {
+  const tank = APP.tanks.find((t) => t.id === tankId); if (!tank) return;
+  const ll = tankLatLng(tank);
+  if (!ll) { toast('No location on file for this tank', 'err'); return; }
+  const panel = $('#tankmap'); panel.innerHTML = '';
+  const info = h('div', { class: 'tankmap-info', id: 'tmap-info', text: navigator.geolocation ? 'Locating you…' : 'Location not available on this device' });
+  panel.append(
+    h('div', { class: 'panel-head' }, [
+      h('div', { class: 'brand small' }, [h('span', { class: 'brand-mark', text: 'SLB' }), h('span', { class: 'brand-name', text: 'Location' })]),
+      h('button', { class: 'icon-btn', onclick: closeTankMap, 'aria-label': 'Close' }, '✕'),
+    ]),
+    h('div', { class: 'tankmap-body' }, [
+      h('div', { class: 'tank-name-lg', style: 'padding:.6rem 1rem 0', text: combinedName(tank) }),
+      h('div', { id: 'tmap' }),
+      info,
+      h('div', { style: 'padding:0 1rem 1.2rem' }, [
+        h('a', { class: 'btn primary block', href: `https://maps.apple.com/?daddr=${ll[0]},${ll[1]}`, target: '_blank', rel: 'noopener' }, 'Directions (Apple Maps)'),
+        h('a', { class: 'btn ghost block', style: 'margin-top:.5rem', href: `https://www.google.com/maps/dir/?api=1&destination=${ll[0]},${ll[1]}`, target: '_blank', rel: 'noopener' }, 'Directions (Google Maps)'),
+      ]),
+    ])
+  );
+  panel.classList.remove('hidden');
+  _tmap = L.map('tmap', { zoomControl: true }).setView(ll, 15);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(_tmap);
+  L.circleMarker(ll, { radius: 9, color: '#fff', weight: 2, fillColor: '#0014DC', fillOpacity: 1 }).addTo(_tmap).bindTooltip('Tank', { direction: 'top' });
+  setTimeout(() => _tmap.invalidateSize(), 60);
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition((pos) => {
+      const ull = [pos.coords.latitude, pos.coords.longitude];
+      L.circleMarker(ull, { radius: 8, color: '#fff', weight: 2, fillColor: '#00A3E0', fillOpacity: 1 }).addTo(_tmap).bindTooltip('You', { direction: 'top' });
+      L.polyline([ull, ll], { color: '#00A3E0', dashArray: '5,6' }).addTo(_tmap);
+      _tmap.fitBounds([ull, ll], { padding: [40, 40], maxZoom: 15 });
+      const el = document.getElementById('tmap-info'); if (el) el.textContent = `You are ${haversineMi(ull, ll).toFixed(2)} mi from this tank`;
+    }, (err) => { const el = document.getElementById('tmap-info'); if (el) el.textContent = 'Your location unavailable (' + err.message + ')'; }, { enableHighAccuracy: true, timeout: 10000 });
+  }
+}
+function closeTankMap() { if (_tmap) { _tmap.remove(); _tmap = null; } $('#tankmap').classList.add('hidden'); }
+
+function repaint() { render(); if (_view === 'map' && _map) renderMarkers(); }
+
 // ---- sync UI ---------------------------------------------------------------
 async function updateSyncUI() {
   const pending = await Sync.pendingCount();
@@ -491,8 +591,8 @@ async function onSyncEvent(evt) {
   if (evt.type === 'sync-end') { APP.syncState = 'idle'; if (evt.pending === 0) toast('All changes synced', 'ok'); }
   // A local edit was queued: refresh the list to reflect it, but leave any
   // open detail panel untouched so the user's focus/scroll isn't disrupted.
-  if (evt.type === 'queued') { await loadLocal(); render(); }
-  if (evt.type === 'data') { await loadLocal(); render(); if (APP.currentTankId) openDetail(APP.currentTankId); }
+  if (evt.type === 'queued') { await loadLocal(); repaint(); }
+  if (evt.type === 'data') { await loadLocal(); repaint(); if (APP.currentTankId) openDetail(APP.currentTankId); }
   if (evt.type === 'online') toast('Back online — syncing');
   if (evt.type === 'offline') toast('Offline — changes saved locally');
   updateSyncUI();
@@ -525,11 +625,13 @@ function wireStaticEvents() {
   });
   $('#scrim').addEventListener('click', closeDetail);
   ['input', 'change'].forEach((ev) => {
-    $('#search').addEventListener(ev, render);
+    $('#search').addEventListener(ev, repaint);
   });
-  $('#filter-foreman').addEventListener('change', render);
-  $('#filter-type').addEventListener('change', render);
-  $('#filter-status').addEventListener('change', render);
+  $('#filter-foreman').addEventListener('change', repaint);
+  $('#filter-type').addEventListener('change', repaint);
+  $('#filter-status').addEventListener('change', repaint);
+  $('#view-list').addEventListener('click', () => setView('list'));
+  $('#view-map').addEventListener('click', () => setView('map'));
   window.addEventListener('online', updateSyncUI);
   window.addEventListener('offline', updateSyncUI);
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && APP.currentTankId) closeDetail(); });

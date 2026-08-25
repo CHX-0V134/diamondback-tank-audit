@@ -204,6 +204,23 @@ input:focus, select:focus, textarea:focus { border-color: var(--primary); box-sh
 .toast.err { background: var(--danger); color: #fff; }
 .toast.ok { background: var(--ok); color: #fff; }
 
+/* map view */
+.viewtoggle { display: flex; align-items: center; gap: .4rem; padding: .4rem .7rem; background: var(--surface); border-bottom: 1px solid var(--border); }
+.seg { border: 1px solid var(--border); background: var(--surface); color: var(--text); font-weight: 700; padding: .4rem .95rem; border-radius: 8px; min-height: 38px; cursor: pointer; touch-action: manipulation; }
+.seg.on { background: var(--primary); color: var(--on-primary); border-color: transparent; }
+.map-legend { margin-left: auto; font-size: .72rem; color: var(--text-muted); }
+.map-legend .lg { font-size: .95rem; vertical-align: middle; }
+.map-legend .lg.needs { color: #e0a100; }
+.map-legend .lg.ok { color: var(--ok); }
+#map { height: calc(100dvh - 210px); min-height: 320px; width: 100%; }
+.map-unmapped { padding: .5rem .8rem; font-size: .8rem; color: var(--text-muted); text-align: center; }
+#tankmap { z-index: 60; }
+.tankmap-body { height: 100%; overflow-y: auto; padding-bottom: env(safe-area-inset-bottom); }
+#tmap { height: 52vh; width: 100%; margin-top: .5rem; }
+.tankmap-info { padding: .7rem 1rem; font-weight: 600; }
+.leaflet-container { background: var(--surface-2); font: inherit; }
+.leaflet-control-attribution { font-size: .6rem; }
+
 .linkbtn { background: none; border: none; color: var(--primary); font-weight: 600; cursor: pointer; padding: .55rem 0; font-size: .95rem; min-height: 40px; touch-action: manipulation; }
 .row-actions { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .2rem; }
 
