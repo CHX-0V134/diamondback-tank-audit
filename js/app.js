@@ -275,22 +275,33 @@ function checkboxField(labelText, checked, onSave) {
 }
 
 // Required Yes/No confirmation. value: true | false | null (unanswered).
-function yesNoField(labelText, value, onSave) {
+// compact Yes/No pair shown inline next to a field (only when there's a value to confirm)
+function smallYesNo(value, onSave) {
+  const yes = h('button', { type: 'button', class: 'yn sm' + (value === true ? ' on-yes' : '') }, 'Yes');
+  const no = h('button', { type: 'button', class: 'yn sm' + (value === false ? ' on-no' : '') }, 'No');
+  yes.addEventListener('click', async () => { await onSave(true); await refreshDetail(); });
+  no.addEventListener('click', async () => { await onSave(false); await refreshDetail(); });
+  return [yes, no];
+}
+
+// numeric field with optional inline confirm buttons
+function numberFieldInline(labelText, value, saveVal, confirm) {
   const flag = savedFlag(navigator.onLine ? '' : 'queued');
-  const yes = h('button', { type: 'button', class: 'yn' + (value === true ? ' on-yes' : '') }, 'Yes');
-  const no = h('button', { type: 'button', class: 'yn' + (value === false ? ' on-no' : '') }, 'No');
-  const set = async (val) => { await onSave(val); await refreshDetail(); };
-  yes.addEventListener('click', () => set(true));
-  no.addEventListener('click', () => set(false));
-  const need = value == null ? h('span', { class: 'yn-need', text: 'required' }) : null;
-  return h('div', { class: 'field' }, [h('label', {}, [labelText, need, flag]), h('div', { class: 'yn-row' }, [yes, no])]);
+  const inp = h('input', { type: 'number', inputmode: 'decimal', enterkeyhint: 'done' }); inp.value = value ?? '';
+  inp.addEventListener('change', async () => {
+    await saveVal(inp.value === '' ? null : Number(inp.value));
+    flag.className = 'saved-flag ' + (navigator.onLine ? '' : 'queued'); flag.textContent = navigator.onLine ? 'saved ✓' : 'queued ✓'; flash(flag);
+  });
+  const row = h('div', { class: 'inline-confirm' }, [inp]);
+  if (confirm && confirm.show) row.append(...smallYesNo(confirm.value, confirm.onSave));
+  const need = confirm && confirm.show && confirm.value == null ? h('span', { class: 'yn-need', text: 'confirm' }) : null;
+  return h('div', { class: 'field' }, [h('label', {}, [labelText, need, flag]), row]);
 }
 
 function productField(tank) {
   const flag = savedFlag('');
   const opts = APP.products.slice().sort((a, b) => (a.code || '').localeCompare(b.code || ''))
     .map((p) => h('option', { value: p.code, ...(p.code === tank.product ? { selected: '' } : {}) }, p.code + (p.is_custom ? ' (custom)' : '')));
-  // ensure current value present even if not in list
   const has = APP.products.some((p) => p.code === tank.product);
   const sel = h('select', {}, [
     ...(!has && tank.product ? [h('option', { value: tank.product, selected: '' }, tank.product)] : []),
@@ -310,14 +321,19 @@ function productField(tank) {
   sel.addEventListener('change', async () => {
     if (sel.value === '__OTHER__') { otherWrap.classList.remove('hidden'); otherInput.focus(); return; }
     otherWrap.classList.add('hidden');
-    // auto-fill product type from the selected product (base data is 1:1)
     const prod = APP.products.find((p) => p.code === sel.value);
     const patch = { product: sel.value };
     if (prod && prod.product_type) patch.product_type = prod.product_type;
     await Sync.editTank(tank.id, patch);
-    await refreshDetail(); // reflect the auto-filled product type
+    await refreshDetail();
   });
-  return h('div', { class: 'field' }, [h('label', {}, ['Product', flag]), sel, otherWrap]);
+
+  // inline "Product correct?" — only when a product value is present
+  const showConfirm = tank.product != null && tank.product !== '';
+  const row = h('div', { class: 'inline-confirm' }, [sel]);
+  if (showConfirm) row.append(...smallYesNo(tank.product_confirmed, (v) => Sync.editTank(tank.id, { product_confirmed: v })));
+  const need = showConfirm && tank.product_confirmed == null ? h('span', { class: 'yn-need', text: 'confirm' }) : null;
+  return h('div', { class: 'field' }, [h('label', {}, ['Product', need, flag]), row, otherWrap]);
 }
 
 function wellCard(w, tank, pumpMakes) {
@@ -379,14 +395,17 @@ function openDetail(tankId) {
   const pumpMakes = distinct(APP.wells, 'pump_make');
 
   const ptypeRO = h('input', { type: 'text', disabled: '' }); ptypeRO.value = tank.product_type || '';
-  const bothAnswered = tank.size_confirmed != null && tank.product_confirmed != null;
+  // confirmations are only required for fields that have a pre-populated value to check
+  const needSize = tank.tank_volume != null && tank.tank_volume !== '';
+  const needProduct = tank.product != null && tank.product !== '';
+  const canReview = (!needSize || tank.size_confirmed != null) && (!needProduct || tank.product_confirmed != null);
   const reviewed = !!tank.reviewed_at;
   const revChip = reviewed
     ? h('div', { class: 'rev-chip ok', text: '✓ Reviewed' + (tank.reviewed_by ? ' · ' + tank.reviewed_by : '') })
     : h('div', { class: 'rev-chip warn', text: '● Needs review' });
   const reviewBtn = reviewed
     ? h('button', { class: 'btn ghost block', onclick: async () => { await Sync.editTank(tank.id, { reviewed_at: null, reviewed_by: null }); await refreshDetail(); toast('Reopened for editing'); } }, '✓ Reviewed — tap to reopen')
-    : h('button', { class: 'btn primary block', ...(bothAnswered ? {} : { disabled: '' }), onclick: async () => { await Sync.editTank(tank.id, { reviewed_at: new Date().toISOString(), reviewed_by: Sync.userEmail() }); await refreshDetail(); toast('Marked reviewed', 'ok'); } }, bothAnswered ? 'Mark reviewed' : 'Answer both Yes/No to review');
+    : h('button', { class: 'btn primary block', ...(canReview ? {} : { disabled: '' }), onclick: async () => { await Sync.editTank(tank.id, { reviewed_at: new Date().toISOString(), reviewed_by: Sync.userEmail() }); await refreshDetail(); toast('Marked reviewed', 'ok'); } }, canReview ? 'Mark reviewed' : 'Confirm the shown values to review');
 
   const body = h('div', { class: 'panel-body' }, [
     h('div', { class: 'section-title', style: 'margin-top:0', text: 'Tank' }),
@@ -396,24 +415,21 @@ function openDetail(tankId) {
 
     h('div', { class: 'section-title', text: 'Configuration' }),
     productField(tank),
-    yesNoField('Product correct?', tank.product_confirmed, (v) => Sync.editTank(tank.id, { product_confirmed: v })),
     h('div', { class: 'grid2' }, [
       h('div', { class: 'field' }, [h('label', {}, 'Product type (auto)'), ptypeRO]),
       selectWithOther('Program', tank.program, programs, (v) => Sync.editTank(tank.id, { program: v })),
     ]),
+    numberFieldInline('Tank size (gal)', tank.tank_volume, (v) => Sync.editTank(tank.id, { tank_volume: v }),
+      { show: needSize, value: tank.size_confirmed, onSave: (v) => Sync.editTank(tank.id, { size_confirmed: v }) }),
     h('div', { class: 'grid2' }, [
-      editField('Tank size (gal)', tank.tank_volume, (v) => Sync.editTank(tank.id, { tank_volume: v }), { type: 'number', number: true, inputmode: 'decimal' }).wrap,
       editField('Target PPM', tank.target_ppm, (v) => Sync.editTank(tank.id, { target_ppm: v }), { type: 'number', number: true, inputmode: 'decimal' }).wrap,
-    ]),
-    yesNoField('Tank size correct?', tank.size_confirmed, (v) => Sync.editTank(tank.id, { size_confirmed: v })),
-    h('div', { class: 'grid2' }, [
-      selectWithOther('Application', tank.application_id, applications, (v) => Sync.editTank(tank.id, { application_id: v })),
       editField('Asset tag', tank.asset_tag, (v) => Sync.editTank(tank.id, { asset_tag: v }), { raw: true }).wrap,
     ]),
     h('div', { class: 'grid2' }, [
+      selectWithOther('Application', tank.application_id, applications, (v) => Sync.editTank(tank.id, { application_id: v })),
       editField('Current inventory (gal)', tank.current_inventory, (v) => Sync.editTank(tank.id, { current_inventory: v }), { type: 'number', number: true, inputmode: 'decimal' }).wrap,
-      checkboxField('Needs order', tank.needs_order, (v) => Sync.editTank(tank.id, { needs_order: v })),
     ]),
+    checkboxField('Needs order', tank.needs_order, (v) => Sync.editTank(tank.id, { needs_order: v })),
     editField('Notes', tank.notes, (v) => Sync.editTank(tank.id, { notes: v }), { type: 'textarea', rows: 2 }).wrap,
 
     h('div', { class: 'section-title', text: `Wells served (${wells.filter((w) => w.is_attached && !w.is_deleted).length})` }),

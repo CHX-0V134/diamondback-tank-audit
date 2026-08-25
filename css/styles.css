@@ -153,6 +153,9 @@ input:focus, select:focus, textarea:focus { border-color: var(--primary); box-sh
 .rev-chip.warn { background: color-mix(in srgb, var(--warn) 20%, transparent); color: color-mix(in srgb, var(--warn) 70%, var(--text)); }
 .rev-chip.ok { background: color-mix(in srgb, var(--ok) 20%, transparent); color: color-mix(in srgb, var(--ok) 70%, var(--text)); }
 .yn-row { display: flex; gap: .5rem; }
+.inline-confirm { display: flex; gap: .4rem; align-items: stretch; }
+.inline-confirm > input, .inline-confirm > select { flex: 1 1 auto; min-width: 0; }
+.yn.sm { flex: 0 0 auto; min-width: 50px; padding: 0 .7rem; font-size: .85rem; }
 .yn { flex: 1; min-height: 46px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); font-weight: 700; font-size: 1rem; cursor: pointer; touch-action: manipulation; }
 .yn.on-yes { background: var(--ok); color: #fff; border-color: transparent; }
 .yn.on-no { background: var(--danger); color: #fff; border-color: transparent; }
