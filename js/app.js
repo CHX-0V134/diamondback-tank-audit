@@ -138,7 +138,8 @@ function combinedName(t) {
   while (p < minLen && toks.every((a) => a[p] === toks[0][p])) p++;
   if (p >= minLen) p = minLen - 1;                 // always leave a distinct tail
   const prefix = toks[0].slice(0, p).join(' ');
-  const tails = [...new Set(toks.map((a) => a.slice(p).join(' ').trim()).filter(Boolean))];
+  const tails = [...new Set(toks.map((a) => a.slice(p).join(' ').trim()).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
   let joined;
   if (tails.length <= 1) joined = tails[0] || '';
   else if (tails.length === 2) joined = tails[0] + ' & ' + tails[1];
