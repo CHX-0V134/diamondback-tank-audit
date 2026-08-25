@@ -438,7 +438,7 @@ function openDetail(tankId) {
       selectWithOther('Application', tank.application_id, applications, (v) => Sync.editTank(tank.id, { application_id: v })),
     ]),
     h('div', { class: 'grid2' }, [
-      editField('Current inventory (gal)', tank.current_inventory, (v) => Sync.editTank(tank.id, { current_inventory: v }), { type: 'number', number: true, inputmode: 'decimal', refresh: true }).wrap,
+      editField('Inventory (gal)', tank.current_inventory, (v) => Sync.editTank(tank.id, { current_inventory: v }), { type: 'number', number: true, inputmode: 'decimal', refresh: true }).wrap,
       editField('Asset tag', tank.asset_tag, (v) => Sync.editTank(tank.id, { asset_tag: v }), { raw: true }).wrap,
     ]),
     checkboxField('Needs order', tank.needs_order, (v) => Sync.editTank(tank.id, { needs_order: v })),
