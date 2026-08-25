@@ -94,21 +94,29 @@ async function push() {
   emit({ type: 'sync-start' });
   try {
     const c = client();
-    let items = await DB.outbox();
-    items.sort((a, b) => a.localId - b.localId);
-    for (const m of items) {
-      if (m.blocked) continue;
-      try {
-        await applyMutation(c, m);
-        await DB.dequeue(m.localId);
-      } catch (err) {
-        m.attempts = (m.attempts || 0) + 1;
-        m.lastError = String(err && err.message ? err.message : err);
-        const networkish = /network|fetch|Failed to fetch|timeout|Load failed/i.test(m.lastError);
-        if (!networkish && m.attempts >= 5) m.blocked = true;
-        await DB.put('outbox', m);
-        if (networkish) break;
+    let networkBroke = false;
+    // Loop until the outbox is fully drained. Re-reading each pass also flushes
+    // mutations that were enqueued WHILE an earlier pass was still running
+    // (rapid successive edits), so the last edit never waits for another trigger.
+    while (true) {
+      const items = (await DB.outbox()).filter((x) => !x.blocked).sort((a, b) => a.localId - b.localId);
+      if (!items.length) break;
+      let progressed = false;
+      for (const m of items) {
+        try {
+          await applyMutation(c, m);
+          await DB.dequeue(m.localId);
+          progressed = true;
+        } catch (err) {
+          m.attempts = (m.attempts || 0) + 1;
+          m.lastError = String(err && err.message ? err.message : err);
+          const networkish = /network|fetch|Failed to fetch|timeout|Load failed/i.test(m.lastError);
+          if (!networkish && m.attempts >= 5) m.blocked = true; // poison-message backstop
+          await DB.put('outbox', m);
+          if (networkish) { networkBroke = true; break; } // stop; retry on next online/trigger
+        }
       }
+      if (networkBroke || !progressed) break;
     }
     const remaining = (await DB.outbox()).filter((x) => !x.blocked).length;
     emit({ type: 'sync-end', pending: remaining });
