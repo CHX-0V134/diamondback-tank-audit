@@ -337,7 +337,7 @@ function productField(tank) {
 }
 
 function wellCard(w, tank, pumpMakes) {
-  const nameF = editField('Well name', w.asset_name, (v) => Sync.editWell(w.id, { asset_name: v }), { autocapitalize: 'characters' });
+  // well name is shown as the card header, so no separate input here
   const acctF = editField('Accounting ID', w.accounting_id, (v) => Sync.editWell(w.id, { accounting_id: v }), { raw: true, inputmode: 'numeric' });
   // pump make is a dropdown; changing it clears the pump S/N (belongs to the old pump)
   const makeF = selectWithOther('Pump make', w.pump_make, pumpMakes, async (v) => { await Sync.editWell(w.id, { pump_make: v, pump_sn: null }); }, { rerender: true });
@@ -352,7 +352,7 @@ function wellCard(w, tank, pumpMakes) {
       h('span', { class: 'well-name', text: w.asset_name || w.accounting_id || 'Well' }),
       w.source === 'field' ? h('span', { class: 'chip', text: 'added' }) : (w.is_attached ? null : h('span', { class: 'chip', text: 'detached' })),
     ]),
-    h('div', { class: 'grid2' }, [nameF.wrap, acctF.wrap]),
+    acctF.wrap,
     h('div', { class: 'grid2' }, [makeF, snF.wrap]),
     h('div', { class: 'grid2' }, [foundF.wrap, leftF.wrap]),
     h('div', { class: 'row-actions' }, [w.is_attached ? detach : null]),
