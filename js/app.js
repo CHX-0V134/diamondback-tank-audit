@@ -170,7 +170,7 @@ function render() {
   const frag = document.createDocumentFragment();
   for (const t of tanks) {
     const count = attachedWells(t).length;
-    const card = h('div', { class: 'tank', onclick: () => openDetail(t.id) }, [
+    const card = h('div', { class: 'tank' + (!t.reviewed_at ? ' has-corner' : ''), onclick: () => openDetail(t.id) }, [
       h('div', { class: 'tank-top' }, [
         h('div', { class: 'tank-title', text: combinedName(t) }),
         h('span', { class: 'chip type', text: t.product_type || '—' }),
@@ -181,10 +181,9 @@ function render() {
         h('span', { html: `<b>${count}</b> well${count === 1 ? '' : 's'}` }),
         (t.current_inventory != null && t.current_inventory !== '') ? h('span', { html: `inv <b>${esc(t.current_inventory)}</b> gal` }) : null,
         t.source === 'field' ? h('span', { class: 'badge-field', text: 'field-added' }) : null,
-        !t.reviewed_at ? h('span', { class: 'badge-review', text: 'NEEDS REVIEW' }) : null,
         t.needs_order ? h('span', { class: 'badge-order', text: 'NEEDS ORDER' }) : null,
       ]),
-      h('div', { class: 'tank-slot mono', text: t.tgl_slot }),
+      !t.reviewed_at ? h('span', { class: 'badge-review corner', text: 'NEEDS REVIEW' }) : null,
     ]);
     frag.append(card);
   }
