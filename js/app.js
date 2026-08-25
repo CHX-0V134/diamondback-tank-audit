@@ -179,6 +179,7 @@ function render() {
         h('span', { html: `<b>${count}</b> well${count === 1 ? '' : 's'}` }),
         h('span', { html: `${esc(t.program) || '—'} · ${esc(t.target_ppm ?? '—')} ppm` }),
         t.source === 'field' ? h('span', { class: 'badge-field', text: 'field-added' }) : null,
+        t.needs_order ? h('span', { class: 'badge-order', text: 'NEEDS ORDER' }) : null,
       ]),
       h('div', { class: 'tank-slot mono', text: t.tgl_slot }),
     ]);
@@ -226,6 +227,50 @@ function editField(labelText, value, save, opts = {}) {
   return { wrap: h('div', { class: 'field' }, [lbl, input]), input };
 }
 
+async function refreshDetail() { await loadLocal(); if (APP.currentTankId) openDetail(APP.currentTankId); }
+
+function distinct(list, key) {
+  return [...new Set(list.map((x) => x[key]).filter(Boolean))]
+    .sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' }));
+}
+
+// A <select> whose options come from base data, plus an "Other…" free-text option.
+// New free-text values simply get saved on the record; once synced they appear in
+// everyone's dropdown (options are rebuilt from live data).
+function selectWithOther(labelText, value, options, onSave, opts = {}) {
+  const flag = savedFlag(navigator.onLine ? '' : 'queued');
+  const inList = value != null && value !== '' && options.includes(value);
+  const sel = h('select', {}, [
+    h('option', { value: '' }, opts.placeholder || '—'),
+    ...(!inList && value ? [h('option', { value, selected: '' }, value)] : []),
+    ...options.map((o) => h('option', { value: o, ...(o === value ? { selected: '' } : {}) }, o)),
+    h('option', { value: '__OTHER__' }, '➕ Other…'),
+  ]);
+  const wrap = h('div', { class: 'field hidden' });
+  const inp = h('input', { type: 'text', placeholder: 'Type a value', autocapitalize: 'characters', autocorrect: 'off', spellcheck: 'false' });
+  const btn = h('button', { class: 'btn primary', style: 'margin-top:.5rem', onclick: async () => { const v = inp.value.trim(); if (!v) return; await onSave(v); await refreshDetail(); } }, 'Save');
+  wrap.append(h('label', {}, 'New value'), inp, btn);
+  sel.addEventListener('change', async () => {
+    if (sel.value === '__OTHER__') { wrap.classList.remove('hidden'); inp.focus(); return; }
+    wrap.classList.add('hidden');
+    await onSave(sel.value === '' ? null : sel.value);
+    if (opts.rerender) { await refreshDetail(); return; }
+    flag.className = 'saved-flag ' + (navigator.onLine ? '' : 'queued'); flag.textContent = navigator.onLine ? 'saved ✓' : 'queued ✓'; flash(flag);
+  });
+  return h('div', { class: 'field' }, [h('label', {}, [labelText, flag]), sel, wrap]);
+}
+
+function checkboxField(labelText, checked, onSave) {
+  const flag = savedFlag(navigator.onLine ? '' : 'queued');
+  const cb = h('input', { type: 'checkbox' });
+  cb.checked = !!checked;
+  cb.addEventListener('change', async () => {
+    await onSave(cb.checked);
+    flag.className = 'saved-flag ' + (navigator.onLine ? '' : 'queued'); flag.textContent = navigator.onLine ? 'saved ✓' : 'queued ✓'; flash(flag);
+  });
+  return h('div', { class: 'field' }, [h('label', { class: 'checkrow' }, [cb, h('span', { text: labelText }), flag])]);
+}
+
 function productField(tank) {
   const flag = savedFlag('');
   const opts = APP.products.slice().sort((a, b) => (a.code || '').localeCompare(b.code || ''))
@@ -250,18 +295,24 @@ function productField(tank) {
   sel.addEventListener('change', async () => {
     if (sel.value === '__OTHER__') { otherWrap.classList.remove('hidden'); otherInput.focus(); return; }
     otherWrap.classList.add('hidden');
-    await Sync.editTank(tank.id, { product: sel.value });
-    flag.className = 'saved-flag ' + (navigator.onLine ? '' : 'queued');
-    flag.textContent = navigator.onLine ? 'saved ✓' : 'queued ✓'; flash(flag);
+    // auto-fill product type from the selected product (base data is 1:1)
+    const prod = APP.products.find((p) => p.code === sel.value);
+    const patch = { product: sel.value };
+    if (prod && prod.product_type) patch.product_type = prod.product_type;
+    await Sync.editTank(tank.id, patch);
+    await refreshDetail(); // reflect the auto-filled product type
   });
   return h('div', { class: 'field' }, [h('label', {}, ['Product', flag]), sel, otherWrap]);
 }
 
-function wellCard(w, tank) {
+function wellCard(w, tank, pumpMakes) {
   const nameF = editField('Well name', w.asset_name, (v) => Sync.editWell(w.id, { asset_name: v }), { autocapitalize: 'characters' });
   const acctF = editField('Accounting ID', w.accounting_id, (v) => Sync.editWell(w.id, { accounting_id: v }), { raw: true, inputmode: 'numeric' });
-  const makeF = editField('Pump make', w.pump_make, (v) => Sync.editWell(w.id, { pump_make: v }), { list: 'dl-pumpmake', raw: true });
+  // pump make is a dropdown; changing it clears the pump S/N (belongs to the old pump)
+  const makeF = selectWithOther('Pump make', w.pump_make, pumpMakes, async (v) => { await Sync.editWell(w.id, { pump_make: v, pump_sn: null }); }, { rerender: true });
   const snF = editField('Pump S/N', w.pump_sn, (v) => Sync.editWell(w.id, { pump_sn: v }), { raw: true });
+  const foundF = editField('Rate as found', w.rate_as_found, (v) => Sync.editWell(w.id, { rate_as_found: v }), { type: 'number', number: true, inputmode: 'decimal' });
+  const leftF = editField('Rate as left', w.rate_as_left, (v) => Sync.editWell(w.id, { rate_as_left: v }), { type: 'number', number: true, inputmode: 'decimal' });
   const detach = h('button', { class: 'linkbtn', style: 'color:var(--danger)', onclick: async () => {
     await Sync.detachWell(w.id); await loadLocal(); openDetail(tank.id); toast('Well detached');
   } }, 'Detach from tank');
@@ -271,7 +322,8 @@ function wellCard(w, tank) {
       w.source === 'field' ? h('span', { class: 'chip', text: 'added' }) : (w.is_attached ? null : h('span', { class: 'chip', text: 'detached' })),
     ]),
     h('div', { class: 'grid2' }, [nameF.wrap, acctF.wrap]),
-    h('div', { class: 'grid2' }, [makeF.wrap, snF.wrap]),
+    h('div', { class: 'grid2' }, [makeF, snF.wrap]),
+    h('div', { class: 'grid2' }, [foundF.wrap, leftF.wrap]),
     h('div', { class: 'row-actions' }, [w.is_attached ? detach : null]),
   ]);
 }
@@ -307,6 +359,12 @@ function openDetail(tankId) {
   APP.currentTankId = tankId;
   const wells = (APP.wellsByTank.get(tankId) || []).slice().sort((a, b) => (a.asset_name || '').localeCompare(b.asset_name || ''));
 
+  const programs = distinct(APP.tanks, 'program');
+  const applications = distinct(APP.tanks, 'application_id');
+  const pumpMakes = distinct(APP.wells, 'pump_make');
+
+  const ptypeRO = h('input', { type: 'text', disabled: '' }); ptypeRO.value = tank.product_type || '';
+
   const body = h('div', { class: 'panel-body' }, [
     h('div', { class: 'section-title', style: 'margin-top:0', text: 'Tank' }),
     h('div', { class: 'tank-name-lg', text: combinedName(tank) }),
@@ -315,21 +373,25 @@ function openDetail(tankId) {
     h('div', { class: 'section-title', text: 'Configuration' }),
     productField(tank),
     h('div', { class: 'grid2' }, [
+      h('div', { class: 'field' }, [h('label', {}, 'Product type (auto)'), ptypeRO]),
+      selectWithOther('Program', tank.program, programs, (v) => Sync.editTank(tank.id, { program: v })),
+    ]),
+    h('div', { class: 'grid2' }, [
       editField('Tank size (gal)', tank.tank_volume, (v) => Sync.editTank(tank.id, { tank_volume: v }), { type: 'number', number: true, inputmode: 'decimal' }).wrap,
       editField('Target PPM', tank.target_ppm, (v) => Sync.editTank(tank.id, { target_ppm: v }), { type: 'number', number: true, inputmode: 'decimal' }).wrap,
     ]),
     h('div', { class: 'grid2' }, [
-      editField('Product type', tank.product_type, (v) => Sync.editTank(tank.id, { product_type: v }), { list: 'dl-ptype', raw: true }).wrap,
-      editField('Program', tank.program, (v) => Sync.editTank(tank.id, { program: v }), { list: 'dl-program', raw: true }).wrap,
+      selectWithOther('Application', tank.application_id, applications, (v) => Sync.editTank(tank.id, { application_id: v })),
+      editField('Asset tag', tank.asset_tag, (v) => Sync.editTank(tank.id, { asset_tag: v }), { raw: true }).wrap,
     ]),
     h('div', { class: 'grid2' }, [
-      editField('Application', tank.application_id, (v) => Sync.editTank(tank.id, { application_id: v }), { list: 'dl-app' }).wrap,
-      editField('Asset tag', tank.asset_tag, (v) => Sync.editTank(tank.id, { asset_tag: v }), { raw: true }).wrap,
+      editField('Current inventory (gal)', tank.current_inventory, (v) => Sync.editTank(tank.id, { current_inventory: v }), { type: 'number', number: true, inputmode: 'decimal' }).wrap,
+      checkboxField('Needs order', tank.needs_order, (v) => Sync.editTank(tank.id, { needs_order: v })),
     ]),
     editField('Notes', tank.notes, (v) => Sync.editTank(tank.id, { notes: v }), { type: 'textarea', rows: 2 }).wrap,
 
     h('div', { class: 'section-title', text: `Wells served (${wells.filter((w) => w.is_attached && !w.is_deleted).length})` }),
-    ...wells.filter((w) => !w.is_deleted).map((w) => wellCard(w, tank)),
+    ...wells.filter((w) => !w.is_deleted).map((w) => wellCard(w, tank, pumpMakes)),
     attachForm(tank),
   ]);
 
