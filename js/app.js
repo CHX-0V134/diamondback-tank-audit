@@ -176,7 +176,7 @@ function render() {
         h('span', { class: 'chip type', text: t.product_type || '—' }),
       ]),
       h('div', { class: 'tank-meta' }, [
-        h('span', { html: `<b>${esc(t.product) || '—'}</b> product` }),
+        h('span', { html: `<b>${esc(t.product) || '—'}</b>` }),
         h('span', { html: `<b>${esc(t.tank_volume ?? '—')}</b> gal` }),
         h('span', { html: `<b>${count}</b> well${count === 1 ? '' : 's'}` }),
         (t.current_inventory != null && t.current_inventory !== '') ? h('span', { html: `inv <b>${esc(t.current_inventory)}</b> gal` }) : null,
