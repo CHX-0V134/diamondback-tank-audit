@@ -37,27 +37,31 @@
 
   <!-- Main app -->
   <div id="app" class="hidden">
-    <header class="topbar">
-      <div class="brand small"><span class="brand-mark">SLB</span><span class="brand-name">Tank Audit</span></div>
-      <div class="topbar-actions">
-        <button id="sync-btn" class="btn sync" title="Sync now">
-          <span class="dot" id="net-dot"></span><span id="sync-label">Sync</span>
-        </button>
-        <button id="theme-btn" class="icon-btn" title="Toggle light/dark" aria-label="Toggle theme">◐</button>
-        <button id="menu-btn" class="icon-btn" title="Account" aria-label="Account">≡</button>
+    <div class="appbar">
+      <header class="topbar">
+        <div class="brand small"><span class="brand-mark">SLB</span><span class="brand-name">Tank Audit</span></div>
+        <div class="topbar-actions">
+          <button id="sync-btn" class="btn sync" title="Sync now">
+            <span class="dot" id="net-dot"></span><span id="sync-label">Sync</span>
+          </button>
+          <button id="theme-btn" class="icon-btn" title="Toggle light/dark" aria-label="Toggle theme">◐</button>
+          <button id="menu-btn" class="icon-btn" title="Account" aria-label="Account">≡</button>
+        </div>
+      </header>
+      <div class="toolbar">
+        <input id="search" type="search" enterkeyhint="search" autocapitalize="off" autocorrect="off" spellcheck="false"
+               placeholder="Search well, accounting ID, tank ID, product…" />
+        <select id="filter-foreman"><option value="">All foremen</option></select>
+        <select id="filter-type"><option value="">All types</option></select>
       </div>
-    </header>
+    </div>
+
+    <div id="offline-banner" class="offline-banner hidden">● Offline — changes are saved on this device and will sync automatically.</div>
 
     <div id="account-menu" class="menu hidden">
       <div class="menu-email" id="menu-email"></div>
       <div class="menu-row" id="sync-detail"></div>
       <button class="btn ghost block" id="signout-btn">Sign out</button>
-    </div>
-
-    <div class="toolbar">
-      <input id="search" type="search" placeholder="Search well, accounting ID, tank ID, product…" />
-      <select id="filter-foreman"><option value="">All foremen</option></select>
-      <select id="filter-type"><option value="">All types</option></select>
     </div>
 
     <main id="list" class="list"></main>

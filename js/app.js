@@ -191,6 +191,11 @@ function editField(labelText, value, save, opts = {}) {
     input = h('input', { type: opts.type || 'text' });
     if (opts.list) input.setAttribute('list', opts.list);
     if (opts.inputmode) input.setAttribute('inputmode', opts.inputmode);
+    // Serial numbers / IDs / tags: stop the phone from "helpfully" autocapitalizing
+    // or autocorrecting them into garbage.
+    if (opts.raw) { input.setAttribute('autocapitalize', 'off'); input.setAttribute('autocorrect', 'off'); input.setAttribute('spellcheck', 'false'); }
+    else if (opts.autocapitalize) { input.setAttribute('autocapitalize', opts.autocapitalize); input.setAttribute('autocorrect', 'off'); input.setAttribute('spellcheck', 'false'); }
+    input.setAttribute('enterkeyhint', 'done');
     input.value = value ?? '';
   }
   input.addEventListener('change', async () => {
@@ -238,10 +243,10 @@ function productField(tank) {
 }
 
 function wellCard(w, tank) {
-  const nameF = editField('Well name', w.asset_name, (v) => Sync.editWell(w.id, { asset_name: v }));
-  const acctF = editField('Accounting ID', w.accounting_id, (v) => Sync.editWell(w.id, { accounting_id: v }));
-  const makeF = editField('Pump make', w.pump_make, (v) => Sync.editWell(w.id, { pump_make: v }), { list: 'dl-pumpmake' });
-  const snF = editField('Pump S/N', w.pump_sn, (v) => Sync.editWell(w.id, { pump_sn: v }));
+  const nameF = editField('Well name', w.asset_name, (v) => Sync.editWell(w.id, { asset_name: v }), { autocapitalize: 'characters' });
+  const acctF = editField('Accounting ID', w.accounting_id, (v) => Sync.editWell(w.id, { accounting_id: v }), { raw: true, inputmode: 'numeric' });
+  const makeF = editField('Pump make', w.pump_make, (v) => Sync.editWell(w.id, { pump_make: v }), { list: 'dl-pumpmake', raw: true });
+  const snF = editField('Pump S/N', w.pump_sn, (v) => Sync.editWell(w.id, { pump_sn: v }), { raw: true });
   const detach = h('button', { class: 'linkbtn', style: 'color:var(--danger)', onclick: async () => {
     await Sync.detachWell(w.id); await loadLocal(); openDetail(tank.id); toast('Well detached');
   } }, 'Detach from tank');
@@ -257,10 +262,11 @@ function wellCard(w, tank) {
 }
 
 function attachForm(tank) {
-  const acc = h('input', { type: 'text', placeholder: 'Accounting ID' });
-  const nm = h('input', { type: 'text', placeholder: 'Well name' });
-  const mk = h('input', { type: 'text', placeholder: 'Pump make', list: 'dl-pumpmake' });
-  const sn = h('input', { type: 'text', placeholder: 'Pump S/N' });
+  const raw = { autocapitalize: 'off', autocorrect: 'off', spellcheck: 'false', enterkeyhint: 'next' };
+  const acc = h('input', { type: 'text', placeholder: 'Accounting ID', inputmode: 'numeric', ...raw });
+  const nm = h('input', { type: 'text', placeholder: 'Well name', autocapitalize: 'characters', autocorrect: 'off', spellcheck: 'false', enterkeyhint: 'next' });
+  const mk = h('input', { type: 'text', placeholder: 'Pump make', list: 'dl-pumpmake', ...raw });
+  const sn = h('input', { type: 'text', placeholder: 'Pump S/N', ...raw });
   const btn = h('button', { class: 'btn primary', onclick: async () => {
     if (!nm.value.trim() && !acc.value.trim()) { toast('Enter a well name or accounting ID', 'err'); return; }
     await Sync.attachWell(tank.id, { accounting_id: acc.value.trim(), asset_name: nm.value.trim(), pump_make: mk.value.trim(), pump_sn: sn.value.trim() });
@@ -297,12 +303,12 @@ function openDetail(tankId) {
       editField('Target PPM', tank.target_ppm, (v) => Sync.editTank(tank.id, { target_ppm: v }), { type: 'number', number: true, inputmode: 'decimal' }).wrap,
     ]),
     h('div', { class: 'grid2' }, [
-      editField('Product type', tank.product_type, (v) => Sync.editTank(tank.id, { product_type: v }), { list: 'dl-ptype' }).wrap,
-      editField('Program', tank.program, (v) => Sync.editTank(tank.id, { program: v }), { list: 'dl-program' }).wrap,
+      editField('Product type', tank.product_type, (v) => Sync.editTank(tank.id, { product_type: v }), { list: 'dl-ptype', raw: true }).wrap,
+      editField('Program', tank.program, (v) => Sync.editTank(tank.id, { program: v }), { list: 'dl-program', raw: true }).wrap,
     ]),
     h('div', { class: 'grid2' }, [
       editField('Application', tank.application_id, (v) => Sync.editTank(tank.id, { application_id: v }), { list: 'dl-app' }).wrap,
-      editField('Asset tag', tank.asset_tag, (v) => Sync.editTank(tank.id, { asset_tag: v })).wrap,
+      editField('Asset tag', tank.asset_tag, (v) => Sync.editTank(tank.id, { asset_tag: v }), { raw: true }).wrap,
     ]),
     editField('Notes', tank.notes, (v) => Sync.editTank(tank.id, { notes: v }), { type: 'textarea', rows: 2 }).wrap,
 
@@ -329,6 +335,8 @@ function closeDetail() { APP.currentTankId = null; $('#detail').classList.add('h
 async function updateSyncUI() {
   const pending = await Sync.pendingCount();
   const blocked = await Sync.blockedCount();
+  const banner = $('#offline-banner');
+  if (banner) banner.classList.toggle('hidden', navigator.onLine);
   const dot = $('#net-dot'), label = $('#sync-label');
   dot.className = 'dot';
   if (!navigator.onLine) { dot.classList.add('offline'); label.textContent = pending ? `Offline (${pending})` : 'Offline'; }
