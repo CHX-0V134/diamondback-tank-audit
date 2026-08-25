@@ -123,11 +123,27 @@ function buildDatalists() {
 }
 
 // ---- list render -----------------------------------------------------------
-function tankLead(t) {
-  const ws = (APP.wellsByTank.get(t.id) || []).filter((w) => !w.is_deleted && w.is_attached);
-  if (!ws.length) return { title: '(no wells attached)', count: 0 };
-  const names = ws.map((w) => w.asset_name).filter(Boolean);
-  return { title: names[0] || t.tgl_slot, count: ws.length, extra: names.length > 1 ? ` +${names.length - 1} more` : '' };
+function attachedWells(t) { return (APP.wellsByTank.get(t.id) || []).filter((w) => !w.is_deleted && w.is_attached); }
+
+// Merge the attached wells' names into one label: shared prefix once, then each
+// distinct tail joined with commas and an ampersand before the last.
+// e.g. "MABEE BREEDLOVE D 2408LS, E 2408MS, F 2408WA & G 2408WB"
+function combinedName(t) {
+  const names = attachedWells(t).map((w) => (w.asset_name || '').trim()).filter(Boolean);
+  if (!names.length) return t.tgl_slot || '(no wells attached)';
+  if (names.length === 1) return names[0];
+  const toks = names.map((n) => n.split(/\s+/));
+  const minLen = Math.min(...toks.map((a) => a.length));
+  let p = 0;
+  while (p < minLen && toks.every((a) => a[p] === toks[0][p])) p++;
+  if (p >= minLen) p = minLen - 1;                 // always leave a distinct tail
+  const prefix = toks[0].slice(0, p).join(' ');
+  const tails = [...new Set(toks.map((a) => a.slice(p).join(' ').trim()).filter(Boolean))];
+  let joined;
+  if (tails.length <= 1) joined = tails[0] || '';
+  else if (tails.length === 2) joined = tails[0] + ' & ' + tails[1];
+  else joined = tails.slice(0, -1).join(', ') + ' & ' + tails[tails.length - 1];
+  return (prefix ? prefix + ' ' : '') + joined;
 }
 
 function matchesFilter(t) {
@@ -150,16 +166,16 @@ function render() {
   $('#empty').classList.toggle('hidden', tanks.length > 0);
   const frag = document.createDocumentFragment();
   for (const t of tanks) {
-    const lead = tankLead(t);
+    const count = attachedWells(t).length;
     const card = h('div', { class: 'tank', onclick: () => openDetail(t.id) }, [
       h('div', { class: 'tank-top' }, [
-        h('div', { class: 'tank-title' }, [lead.title, lead.extra ? h('span', { class: 'muted', text: lead.extra }) : null]),
+        h('div', { class: 'tank-title', text: combinedName(t) }),
         h('span', { class: 'chip type', text: t.product_type || '—' }),
       ]),
       h('div', { class: 'tank-meta' }, [
         h('span', { html: `<b>${esc(t.product) || '—'}</b> product` }),
         h('span', { html: `<b>${esc(t.tank_volume ?? '—')}</b> gal` }),
-        h('span', { html: `<b>${lead.count}</b> well${lead.count === 1 ? '' : 's'}` }),
+        h('span', { html: `<b>${count}</b> well${count === 1 ? '' : 's'}` }),
         h('span', { html: `${esc(t.program) || '—'} · ${esc(t.target_ppm ?? '—')} ppm` }),
         t.source === 'field' ? h('span', { class: 'badge-field', text: 'field-added' }) : null,
       ]),
@@ -291,8 +307,9 @@ function openDetail(tankId) {
   const wells = (APP.wellsByTank.get(tankId) || []).slice().sort((a, b) => (a.asset_name || '').localeCompare(b.asset_name || ''));
 
   const body = h('div', { class: 'panel-body' }, [
-    h('div', { class: 'section-title', style: 'margin-top:0', text: 'Tank / slot' }),
-    h('div', { class: 'mono muted', style: 'word-break:break-all;margin-bottom:.4rem', text: tank.tgl_slot }),
+    h('div', { class: 'section-title', style: 'margin-top:0', text: 'Tank' }),
+    h('div', { class: 'tank-name-lg', text: combinedName(tank) }),
+    h('div', { class: 'mono muted', style: 'word-break:break-all;font-size:.72rem;margin:.15rem 0 .2rem', text: 'ID: ' + tank.tgl_slot }),
 
     h('div', { class: 'section-title', text: 'Configuration' }),
     productField(tank),

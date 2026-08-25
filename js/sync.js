@@ -150,6 +150,24 @@ async function editWell(wellId, changes) {
   const tank = cur ? await DB.get('tanks', cur.tank_id) : null;
   await DB.put('wells', { ...cur, ...changes });
   await enqueueAndSync({ op: 'update_well', entity: 'well', entityId: wellId, payload: changes, changes: diff, meta: { tgl_slot: tank ? tank.tgl_slot : null, accounting_id: cur.accounting_id } });
+  // accounting_id is part of the tgl_slot -> keep the slot in sync
+  if ('accounting_id' in changes && cur) await regenSlot(cur.tank_id);
+}
+
+// Rebuild a tank's tgl_slot from its currently-attached wells' accounting IDs
+// (kept as <accts concatenated>_<middle>_<product_type>). Called on attach/detach
+// and when an accounting_id changes.
+async function regenSlot(tankId) {
+  const tank = await DB.get('tanks', tankId);
+  if (!tank) return;
+  const wells = (await DB.getAll('wells')).filter((w) => w.tank_id === tankId && !w.is_deleted && w.is_attached);
+  const accts = [...new Set(wells.map((w) => (w.accounting_id || '').trim()).filter(Boolean))].sort();
+  if (!accts.length) return; // never blank a slot out entirely
+  const parts = String(tank.tgl_slot || '').split('_');
+  const middle = parts.length >= 2 ? parts[parts.length - 2] : 'C';
+  const ptype = tank.product_type || parts[parts.length - 1] || '';
+  const newSlot = accts.join('') + '_' + middle + '_' + ptype;
+  if (newSlot !== tank.tgl_slot) await editTank(tankId, { tgl_slot: newSlot });
 }
 
 async function attachWell(tankId, fields) {
@@ -166,6 +184,7 @@ async function attachWell(tankId, fields) {
     changes: [{ field: 'accounting_id', old: null, new: row.accounting_id }],
     meta: { tgl_slot: tank ? tank.tgl_slot : null, accounting_id: row.accounting_id },
   });
+  await regenSlot(tankId);
   return row;
 }
 
@@ -178,6 +197,7 @@ async function detachWell(wellId) {
     changes: [{ field: 'is_attached', old: true, new: false }],
     meta: { tgl_slot: tank ? tank.tgl_slot : null, accounting_id: cur.accounting_id },
   });
+  await regenSlot(cur.tank_id);
 }
 
 async function addCustomProduct(code) {
