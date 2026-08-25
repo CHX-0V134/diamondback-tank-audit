@@ -1,7 +1,7 @@
 // Service worker — offline app shell. Caches static assets so the app boots
 // with no network. Supabase API traffic (cross-origin) is never touched here;
 // offline data durability is handled by IndexedDB in the app.
-const CACHE = 'wca-v18';
+const CACHE = 'wca-v19';
 const ASSETS = [
   './', './index.html',
   './css/styles.css', './css/leaflet.css',

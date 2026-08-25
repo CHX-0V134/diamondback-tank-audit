@@ -91,6 +91,7 @@ async function loadLocal() {
   APP.tanks = await DB.getAll('tanks');
   APP.wells = await DB.getAll('wells');
   APP.products = await DB.getAll('products');
+  APP.catalog = await DB.getAll('catalog');
   APP.wellsByTank = new Map();
   for (const w of APP.wells) {
     if (!APP.wellsByTank.has(w.tank_id)) APP.wellsByTank.set(w.tank_id, []);
@@ -340,49 +341,49 @@ function productField(tank) {
   return h('div', { class: 'field' }, [h('label', {}, ['Product', need, flag]), row, otherWrap]);
 }
 
-function wellCard(w, tank, pumpMakes) {
-  // well name is shown as the card header, so no separate input here
-  const acctF = editField('Accounting ID', w.accounting_id, (v) => Sync.editWell(w.id, { accounting_id: v }), { raw: true, inputmode: 'numeric' });
-  // pump make is a dropdown; changing it clears the pump S/N (belongs to the old pump)
-  const makeF = selectWithOther('Pump make', w.pump_make, pumpMakes, async (v) => { await Sync.editWell(w.id, { pump_make: v, pump_sn: null }); }, { rerender: true });
-  const snF = editField('Pump S/N', w.pump_sn, (v) => Sync.editWell(w.id, { pump_sn: v }), { raw: true });
+function wellCard(w, tank) {
+  const acctRO = h('input', { type: 'text', disabled: '' }); acctRO.value = w.accounting_id || '';
   const foundF = editField('Rate as found', w.rate_as_found, (v) => Sync.editWell(w.id, { rate_as_found: v }), { type: 'number', number: true, inputmode: 'decimal' });
   const leftF = editField('Rate as left', w.rate_as_left, (v) => Sync.editWell(w.id, { rate_as_left: v }), { type: 'number', number: true, inputmode: 'decimal', refresh: true });
-  const detach = h('button', { class: 'linkbtn', style: 'color:var(--danger)', onclick: async () => {
-    await Sync.detachWell(w.id); await loadLocal(); openDetail(tank.id); toast('Well detached');
-  } }, 'Detach from tank');
+  const detach = h('button', { class: 'linkbtn', style: 'color:var(--danger)', onclick: () => confirmDetach(w, tank) }, 'Detach from tank');
   return h('div', { class: 'well' + (w.is_attached ? '' : ' detached') }, [
     h('div', { class: 'well-head' }, [
       h('span', { class: 'well-name', text: w.asset_name || w.accounting_id || 'Well' }),
       w.source === 'field' ? h('span', { class: 'chip', text: 'added' }) : (w.is_attached ? null : h('span', { class: 'chip', text: 'detached' })),
     ]),
-    acctF.wrap,
-    h('div', { class: 'grid2' }, [makeF, snF.wrap]),
+    h('div', { class: 'field' }, [h('label', {}, 'Accounting ID'), acctRO]),
     h('div', { class: 'grid2' }, [foundF.wrap, leftF.wrap]),
     h('div', { class: 'row-actions' }, [w.is_attached ? detach : null]),
   ]);
 }
 
+// datalist of catalog well names (master pick-list)
+function catalogDatalistId() {
+  let dl = document.getElementById('dl-catalog');
+  if (!dl) { dl = h('datalist', { id: 'dl-catalog' }); document.body.append(dl); }
+  dl.innerHTML = (APP.catalog || []).slice().sort((a, b) => (a.asset_name || '').localeCompare(b.asset_name || ''))
+    .map((c) => `<option value="${esc(c.asset_name)}"></option>`).join('');
+  return 'dl-catalog';
+}
+function catalogByName(name) { return (APP.catalog || []).find((c) => (c.asset_name || '').toLowerCase() === (name || '').trim().toLowerCase()); }
+
 function attachForm(tank) {
-  const raw = { autocapitalize: 'off', autocorrect: 'off', spellcheck: 'false', enterkeyhint: 'next' };
-  const acc = h('input', { type: 'text', placeholder: 'Accounting ID', inputmode: 'numeric', ...raw });
-  const nm = h('input', { type: 'text', placeholder: 'Well name', autocapitalize: 'characters', autocorrect: 'off', spellcheck: 'false', enterkeyhint: 'next' });
-  const mk = h('input', { type: 'text', placeholder: 'Pump make', list: 'dl-pumpmake', ...raw });
-  const sn = h('input', { type: 'text', placeholder: 'Pump S/N', ...raw });
+  const dlId = catalogDatalistId();
+  const nm = h('input', { type: 'text', placeholder: 'Search well name…', list: dlId, autocapitalize: 'characters', autocorrect: 'off', spellcheck: 'false', enterkeyhint: 'done' });
+  const accRO = h('input', { type: 'text', disabled: '', placeholder: '(auto)' });
+  const sync = () => { const c = catalogByName(nm.value); accRO.value = c ? c.accounting_id : ''; };
+  nm.addEventListener('input', sync); nm.addEventListener('change', sync);
   const btn = h('button', { class: 'btn primary', onclick: async () => {
-    if (!nm.value.trim() && !acc.value.trim()) { toast('Enter a well name or accounting ID', 'err'); return; }
-    await Sync.attachWell(tank.id, { accounting_id: acc.value.trim(), asset_name: nm.value.trim(), pump_make: mk.value.trim(), pump_sn: sn.value.trim() });
+    const c = catalogByName(nm.value);
+    if (!c) { toast('Pick a well from the list', 'err'); return; }
+    await Sync.attachWell(tank.id, { accounting_id: c.accounting_id, asset_name: c.asset_name, foreman: c.foreman, latitude: c.latitude, longitude: c.longitude });
     await loadLocal(); openDetail(tank.id); toast('Well attached', 'ok');
   } }, '+ Attach well');
   return h('div', { class: 'well' }, [
     h('div', { class: 'section-title', style: 'margin-top:0', text: 'Attach a well not shown above' }),
     h('div', { class: 'grid2' }, [
       h('div', { class: 'field' }, [h('label', {}, 'Well name'), nm]),
-      h('div', { class: 'field' }, [h('label', {}, 'Accounting ID'), acc]),
-    ]),
-    h('div', { class: 'grid2' }, [
-      h('div', { class: 'field' }, [h('label', {}, 'Pump make'), mk]),
-      h('div', { class: 'field' }, [h('label', {}, 'Pump S/N'), sn]),
+      h('div', { class: 'field' }, [h('label', {}, 'Accounting ID (auto)'), accRO]),
     ]),
     btn,
   ]);
@@ -393,9 +394,6 @@ function openDetail(tankId) {
   if (!tank) return;
   APP.currentTankId = tankId;
   const wells = (APP.wellsByTank.get(tankId) || []).slice().sort((a, b) => (a.asset_name || '').localeCompare(b.asset_name || ''));
-
-  const applications = distinct(APP.tanks, 'application_id');
-  const pumpMakes = distinct(APP.wells, 'pump_make');
 
   // Days-to-empty: (current inventory − 5% heel of tank size) ÷ total as-left rate
   const totalRate = attachedWells(tank).reduce((s, w) => s + (Number(w.rate_as_left) || 0), 0);
@@ -412,7 +410,6 @@ function openDetail(tankId) {
     ]);
   }
 
-  const ptypeRO = h('input', { type: 'text', disabled: '' }); ptypeRO.value = tank.product_type || '';
   // confirmations are only required for fields that have a pre-populated value to check
   const needSize = tank.tank_volume != null && tank.tank_volume !== '';
   const needProduct = tank.product != null && tank.product !== '';
@@ -438,18 +435,13 @@ function openDetail(tankId) {
     numberFieldInline('Tank size (gal)', tank.tank_volume, (v) => Sync.editTank(tank.id, { tank_volume: v }),
       { show: needSize, value: tank.size_confirmed, onSave: (v) => Sync.editTank(tank.id, { size_confirmed: v }) }),
     h('div', { class: 'grid2' }, [
-      h('div', { class: 'field' }, [h('label', {}, 'Product type (auto)'), ptypeRO]),
-      selectWithOther('Application', tank.application_id, applications, (v) => Sync.editTank(tank.id, { application_id: v })),
-    ]),
-    h('div', { class: 'grid2' }, [
       editField('Inventory (gal)', tank.current_inventory, (v) => Sync.editTank(tank.id, { current_inventory: v }), { type: 'number', number: true, inputmode: 'decimal', refresh: true }).wrap,
-      editField('Asset tag', tank.asset_tag, (v) => Sync.editTank(tank.id, { asset_tag: v }), { raw: true }).wrap,
+      checkboxField('Needs order', tank.needs_order, (v) => Sync.editTank(tank.id, { needs_order: v })),
     ]),
-    checkboxField('Needs order', tank.needs_order, (v) => Sync.editTank(tank.id, { needs_order: v })),
     editField('Notes', tank.notes, (v) => Sync.editTank(tank.id, { notes: v }), { type: 'textarea', rows: 2 }).wrap,
 
     h('div', { class: 'section-title', text: `Wells served (${wells.filter((w) => w.is_attached && !w.is_deleted).length})` }),
-    ...wells.filter((w) => !w.is_deleted).map((w) => wellCard(w, tank, pumpMakes)),
+    ...wells.filter((w) => !w.is_deleted).map((w) => wellCard(w, tank)),
     attachForm(tank),
 
     h('div', { class: 'section-title', text: 'Review' }),
@@ -469,6 +461,94 @@ function openDetail(tankId) {
   $('#scrim').classList.remove('hidden');
 }
 function closeDetail() { APP.currentTankId = null; $('#detail').classList.add('hidden'); $('#scrim').classList.add('hidden'); }
+
+// ---- detach confirm + tank creation ---------------------------------------
+function modal(nodes, opts = {}) {
+  const scrim = h('div', { class: 'scrim', style: 'z-index:70' });
+  const card = h('div', { class: 'dialog' }, nodes);
+  const close = () => { scrim.remove(); card.remove(); };
+  scrim.addEventListener('click', () => { if (opts.dismissible !== false) close(); });
+  document.body.append(scrim, card);
+  return { close };
+}
+
+function wellSeed(w) { return { accounting_id: w.accounting_id, asset_name: w.asset_name, foreman: w.foreman, latitude: w.latitude, longitude: w.longitude, rate_as_found: null, rate_as_left: null }; }
+
+function confirmDetach(w, tank) {
+  let ref;
+  ref = modal([
+    h('h3', { class: 'dlg-title', text: 'Detach ' + (w.asset_name || 'well') + '?' }),
+    h('p', { class: 'muted', style: 'margin:.2rem 0 .9rem', text: 'Does this well need its own tank created separately?' }),
+    h('button', { class: 'btn primary block', onclick: async () => { ref.close(); await Sync.detachWell(w.id); await loadLocal(); openCreateTank([wellSeed(w)]); } }, 'Yes — create a new tank'),
+    h('button', { class: 'btn ghost block', style: 'margin-top:.5rem', onclick: async () => { ref.close(); await Sync.detachWell(w.id); await loadLocal(); openDetail(tank.id); toast('Well detached'); } }, 'No — just detach'),
+    h('button', { class: 'btn ghost block', style: 'margin-top:.5rem', onclick: () => ref.close() }, 'Cancel'),
+  ]);
+}
+
+function openCreateTank(prefillWells = []) {
+  closeDetail();
+  const wells = (prefillWells || []).map((w) => ({ ...w }));
+  const st = { product: '', product_type: '', tank_volume: '', current_inventory: '', notes: '' };
+  const panel = $('#createtank');
+  const productOf = (code) => (APP.products || []).find((p) => p.code === code);
+  const slotPreview = () => {
+    const accts = [...new Set(wells.map((w) => (w.accounting_id || '').trim()).filter(Boolean))].sort();
+    return (accts.length && st.product_type) ? accts.join('') + '_C_' + st.product_type : '—';
+  };
+  function draw() {
+    const dlId = catalogDatalistId();
+    const addNm = h('input', { type: 'text', placeholder: 'Search well name…', list: dlId, autocapitalize: 'characters', autocorrect: 'off', spellcheck: 'false' });
+    const addBtn = h('button', { class: 'btn', onclick: () => {
+      const c = catalogByName(addNm.value);
+      if (!c) { toast('Pick a well from the list', 'err'); return; }
+      if (wells.some((w) => w.accounting_id === c.accounting_id)) { toast('Already added'); return; }
+      wells.push({ accounting_id: c.accounting_id, asset_name: c.asset_name, foreman: c.foreman, latitude: c.latitude, longitude: c.longitude, rate_as_found: null, rate_as_left: null });
+      draw();
+    } }, 'Add');
+    const psel = h('select', {}, [h('option', { value: '' }, 'Select product…'),
+      ...APP.products.slice().sort((a, b) => (a.code || '').localeCompare(b.code || '')).map((p) => h('option', { value: p.code, ...(p.code === st.product ? { selected: '' } : {}) }, p.code))]);
+    psel.addEventListener('change', () => { st.product = psel.value; const pr = productOf(psel.value); st.product_type = pr && pr.product_type ? pr.product_type : ''; draw(); });
+    const ptypeRO = h('input', { type: 'text', disabled: '' }); ptypeRO.value = st.product_type || '';
+    const sizeI = h('input', { type: 'number', inputmode: 'decimal' }); sizeI.value = st.tank_volume; sizeI.addEventListener('change', () => { st.tank_volume = sizeI.value; });
+    const invI = h('input', { type: 'number', inputmode: 'decimal' }); invI.value = st.current_inventory; invI.addEventListener('change', () => { st.current_inventory = invI.value; });
+    const notesI = h('textarea', { rows: 2 }); notesI.value = st.notes; notesI.addEventListener('change', () => { st.notes = notesI.value; });
+    const canCreate = wells.length > 0 && st.product && st.product_type;
+    const createBtn = h('button', { class: 'btn primary block', style: 'margin-top:.6rem', ...(canCreate ? {} : { disabled: '' }), onclick: async () => {
+      const id = await Sync.createTank({ product: st.product, product_type: st.product_type, tank_volume: st.tank_volume === '' ? null : Number(st.tank_volume), current_inventory: st.current_inventory === '' ? null : Number(st.current_inventory), notes: st.notes || null, foreman: wells[0] && wells[0].foreman }, wells);
+      await loadLocal(); closeCreateTank(); openDetail(id); toast('Tank created', 'ok');
+    } }, canCreate ? 'Create tank' : 'Add a well + product to create');
+
+    const wellNodes = wells.map((w, i) => {
+      const fF = h('input', { type: 'number', inputmode: 'decimal' }); fF.value = w.rate_as_found ?? ''; fF.addEventListener('change', () => { w.rate_as_found = fF.value === '' ? null : Number(fF.value); });
+      const lF = h('input', { type: 'number', inputmode: 'decimal' }); lF.value = w.rate_as_left ?? ''; lF.addEventListener('change', () => { w.rate_as_left = lF.value === '' ? null : Number(lF.value); });
+      return h('div', { class: 'well' }, [
+        h('div', { class: 'well-head' }, [h('span', { class: 'well-name', text: w.asset_name || w.accounting_id }), h('button', { class: 'linkbtn', style: 'color:var(--danger)', onclick: () => { wells.splice(i, 1); draw(); } }, 'Remove')]),
+        h('div', { class: 'muted mono', style: 'font-size:.72rem;margin-bottom:.3rem', text: 'acct ' + (w.accounting_id || '—') }),
+        h('div', { class: 'grid2' }, [h('div', { class: 'field' }, [h('label', {}, 'Rate as found'), fF]), h('div', { class: 'field' }, [h('label', {}, 'Rate as left'), lF])]),
+      ]);
+    });
+
+    panel.innerHTML = '';
+    panel.append(
+      h('div', { class: 'panel-head' }, [h('div', { class: 'brand small' }, [h('span', { class: 'brand-mark', text: 'SLB' }), h('span', { class: 'brand-name', text: 'New tank' })]), h('button', { class: 'icon-btn', onclick: closeCreateTank, 'aria-label': 'Close' }, '✕')]),
+      h('div', { class: 'panel-body' }, [
+        h('div', { class: 'section-title', style: 'margin-top:0', text: `Wells on this tank (${wells.length})` }),
+        ...wellNodes,
+        h('div', { class: 'grid2', style: 'align-items:end' }, [h('div', { class: 'field' }, [h('label', {}, 'Add well'), addNm]), addBtn]),
+        h('div', { class: 'section-title', text: 'Configuration' }),
+        h('div', { class: 'field' }, [h('label', {}, 'Product'), psel]),
+        h('div', { class: 'grid2' }, [h('div', { class: 'field' }, [h('label', {}, 'Product type (auto)'), ptypeRO]), h('div', { class: 'field' }, [h('label', {}, 'Tank size (gal)'), sizeI])]),
+        h('div', { class: 'field' }, [h('label', {}, 'Inventory (gal)'), invI]),
+        h('div', { class: 'field' }, [h('label', {}, 'Notes'), notesI]),
+        h('div', { class: 'field' }, [h('label', {}, 'New tank ID (auto)'), h('div', { class: 'mono muted', style: 'word-break:break-all;font-size:.75rem;padding:.3rem 0', text: slotPreview() })]),
+        createBtn,
+      ])
+    );
+  }
+  draw();
+  panel.classList.remove('hidden');
+}
+function closeCreateTank() { const p = $('#createtank'); p.classList.add('hidden'); p.innerHTML = ''; }
 
 // ---- map ------------------------------------------------------------------
 let _map = null, _markerLayer = null, _view = 'list', _tmap = null;
@@ -640,6 +720,7 @@ function wireStaticEvents() {
   $('#filter-status').addEventListener('change', repaint);
   $('#view-list').addEventListener('click', () => setView('list'));
   $('#view-map').addEventListener('click', () => setView('map'));
+  $('#new-tank').addEventListener('click', () => openCreateTank([]));
   window.addEventListener('online', updateSyncUI);
   window.addEventListener('offline', updateSyncUI);
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && APP.currentTankId) closeDetail(); });

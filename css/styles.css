@@ -209,6 +209,12 @@ input:focus, select:focus, textarea:focus { border-color: var(--primary); box-sh
 .tank-count { font-size: .82rem; font-weight: 700; color: var(--text); }
 .seg { border: 1px solid var(--border); background: var(--surface); color: var(--text); font-weight: 700; padding: .4rem .95rem; border-radius: 8px; min-height: 38px; cursor: pointer; touch-action: manipulation; }
 .seg.on { background: var(--primary); color: var(--on-primary); border-color: transparent; }
+.seg.newtank { border-color: color-mix(in srgb, var(--ok) 45%, var(--border)); color: var(--ok); font-weight: 800; }
+#createtank { z-index: 55; }
+.dialog { position: fixed; z-index: 80; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: min(400px, 92vw); background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+  box-shadow: var(--shadow); padding: 1.1rem; }
+.dlg-title { margin: 0 0 .2rem; font-size: 1.1rem; }
 .map-legend { margin-left: auto; font-size: .72rem; color: var(--text-muted); }
 .map-legend .lg { font-size: .95rem; vertical-align: middle; }
 .map-legend .lg.needs { color: #e0a100; }

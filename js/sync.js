@@ -64,6 +64,7 @@ async function pull() {
   await DB.clear('tanks'); await DB.putMany('tanks', data.tanks || []);
   await DB.clear('wells'); await DB.putMany('wells', data.wells || []);
   await DB.clear('products'); await DB.putMany('products', data.products || []);
+  if (data.catalog) { await DB.clear('catalog'); await DB.putMany('catalog', data.catalog); }
   await overlayOutbox();
   await DB.setMeta('lastPull', new Date().toISOString());
   emit({ type: 'data' });
@@ -184,6 +185,8 @@ async function attachWell(tankId, fields) {
     id: crypto.randomUUID(), tank_id: tankId, accounting_id: fields.accounting_id || null,
     asset_name: fields.asset_name || null, foreman: fields.foreman || (tank ? tank.foreman : null),
     pump_make: fields.pump_make || null, pump_sn: fields.pump_sn || null,
+    rate_as_found: fields.rate_as_found ?? null, rate_as_left: fields.rate_as_left ?? null,
+    latitude: fields.latitude ?? null, longitude: fields.longitude ?? null,
     is_attached: true, is_deleted: false, source: 'field',
   };
   await DB.put('wells', row);
@@ -194,6 +197,33 @@ async function attachWell(tankId, fields) {
   });
   await regenSlot(tankId);
   return row;
+}
+
+// Create a brand-new tank (field found a tank not already in the app) + attach its wells.
+// tgl_slot is built from the wells' accounting IDs + _C_<product_type>.
+async function createTank(tank, wells) {
+  const accts = [...new Set((wells || []).map((w) => (w.accounting_id || '').trim()).filter(Boolean))].sort();
+  const ptype = tank.product_type || '';
+  const tgl_slot = accts.join('') + '_C_' + ptype;
+  const id = crypto.randomUUID();
+  const row = {
+    id, tgl_slot,
+    product: tank.product || null, product_type: ptype || null,
+    program: tank.program || null, target_ppm: tank.target_ppm ?? null,
+    tank_volume: tank.tank_volume ?? null, current_inventory: tank.current_inventory ?? null,
+    needs_order: false, asset_tag: tank.asset_tag || null, application_id: tank.application_id || null,
+    foreman: tank.foreman || (wells[0] && wells[0].foreman) || null,
+    number_of_assets: accts.length, notes: tank.notes || null,
+    incumbent: null, size_confirmed: null, product_confirmed: null, reviewed_at: null, reviewed_by: null,
+    source: 'field', is_deleted: false,
+  };
+  await DB.put('tanks', row);
+  await enqueueAndSync({
+    op: 'insert_tank', entity: 'tank', entityId: id, payload: row, logOp: 'create',
+    changes: [{ field: 'tgl_slot', old: null, new: tgl_slot }], meta: { tgl_slot },
+  });
+  for (const w of (wells || [])) await attachWell(id, w);
+  return id;
 }
 
 async function detachWell(wellId) {
@@ -225,7 +255,7 @@ async function blockedCount() { return (await DB.outbox()).filter((x) => x.block
 
 window.Sync = {
   client, onChange, getEmail, userEmail, login, logout, isAllowed,
-  pull, push, fullSync, editTank, editWell, attachWell, detachWell, addCustomProduct,
+  pull, push, fullSync, editTank, editWell, attachWell, detachWell, addCustomProduct, createTank,
   pendingCount, blockedCount,
 };
 

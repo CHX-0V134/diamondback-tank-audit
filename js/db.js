@@ -4,7 +4,7 @@
 // pushed to Supabase until it is safely in IndexedDB.
 // ---------------------------------------------------------------------------
 const DB_NAME = 'well-config-audit';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 // Object stores:
 //   tanks    keyPath id  — server snapshot of audit_tanks
@@ -28,6 +28,7 @@ function openDB() {
         s.createIndex('tank_id', 'tank_id', { unique: false });
       }
       if (!db.objectStoreNames.contains('products')) db.createObjectStore('products', { keyPath: 'id' });
+      if (!db.objectStoreNames.contains('catalog')) db.createObjectStore('catalog', { keyPath: 'accounting_id' });
       if (!db.objectStoreNames.contains('outbox')) db.createObjectStore('outbox', { keyPath: 'localId', autoIncrement: true });
       if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta', { keyPath: 'key' });
     };

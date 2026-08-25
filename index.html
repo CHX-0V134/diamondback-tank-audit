@@ -58,6 +58,7 @@
     <div class="viewtoggle">
       <button id="view-list" class="seg on" type="button">List</button>
       <button id="view-map" class="seg" type="button">Map</button>
+      <button id="new-tank" class="seg newtank" type="button">+ New tank</button>
       <span class="tank-count" id="tank-count"></span>
       <span class="map-legend" id="map-legend"></span>
     </div>
@@ -78,6 +79,9 @@
 
   <!-- Per-tank map overlay -->
   <div id="tankmap" class="panel hidden" role="dialog" aria-modal="true"></div>
+
+  <!-- New tank creation overlay -->
+  <div id="createtank" class="panel hidden" role="dialog" aria-modal="true"></div>
 
   <!-- Tank detail panel -->
   <div id="detail" class="panel hidden" role="dialog" aria-modal="true"></div>
