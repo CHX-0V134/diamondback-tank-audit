@@ -205,7 +205,8 @@ input:focus, select:focus, textarea:focus { border-color: var(--primary); box-sh
 .toast.ok { background: var(--ok); color: #fff; }
 
 /* map view */
-.viewtoggle { display: flex; align-items: center; gap: .4rem; padding: .4rem .7rem; background: var(--surface); border-bottom: 1px solid var(--border); }
+.viewtoggle { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem .5rem; padding: .4rem .7rem; background: var(--surface); border-bottom: 1px solid var(--border); }
+.tank-count { font-size: .82rem; font-weight: 700; color: var(--text); }
 .seg { border: 1px solid var(--border); background: var(--surface); color: var(--text); font-weight: 700; padding: .4rem .95rem; border-radius: 8px; min-height: 38px; cursor: pointer; touch-action: manipulation; }
 .seg.on { background: var(--primary); color: var(--on-primary); border-color: transparent; }
 .map-legend { margin-left: auto; font-size: .72rem; color: var(--text-muted); }

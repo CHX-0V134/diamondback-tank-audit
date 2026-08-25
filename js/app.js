@@ -166,7 +166,10 @@ function render() {
   const list = $('#list'); list.innerHTML = '';
   const tanks = APP.tanks.filter((t) => !t.is_deleted).filter(matchesFilter)
     .sort((a, b) => (a.tgl_slot || '').localeCompare(b.tgl_slot || ''));
-  $('#empty').classList.toggle('hidden', tanks.length > 0);
+  $('#empty').classList.toggle('hidden', tanks.length > 0 || _view !== 'list');
+  const need = tanks.filter((t) => !t.reviewed_at).length;
+  const cnt = $('#tank-count');
+  if (cnt) cnt.textContent = `${tanks.length} tank${tanks.length === 1 ? '' : 's'}` + (need ? ` · ${need} to review` : '');
   const frag = document.createDocumentFragment();
   for (const t of tanks) {
     const count = attachedWells(t).length;
